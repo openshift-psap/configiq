@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m 'fix: show detected precision in all display locations \\(tile, formula, breakdown\\) *)",
+      "Bash(git commit -m 'docs: update live URL to gpu-calc-v2.vercel.app/quick-estimate *)",
+      "Bash(grep -A 10 '$ZodError\\\\b' /Users/vgrover/Downloads/software/gpucalc_v2/gpu-calc-v2/node_modules/zod/v4/core/index.js)",
+      "Bash(node -e \"const z = require\\('zod'\\); console.log\\('Zod version:', z.z ? 'v4-compat' : 'v3-style'\\); try { const s = z.z || z; const obj = s.object\\({a: s.string\\(\\)}\\).strict\\(\\); console.log\\('strict\\(\\) works'\\); } catch\\(e\\) { console.log\\('strict\\(\\) error:', e.message\\); }\")",
+      "Bash(node -e ' *)",
+      "Bash(npm install *)",
+      "Bash(npm test *)",
+      "Bash(curl -s -X POST http://163.74.81.138:7860/gpu_sizer -H 'Content-Type: application/json' -d '{\"model_path\":\"meta-llama/Llama-3.1-70B-Instruct\",\"system\":\"h200_sxm\",\"isl\":2048,\"osl\":128,\"ttft\":1000,\"username\":\"rh-admin\",\"password\":\"TKuquV42nZADo69\"}' --max-time 90)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/gpu-sizer -H 'Content-Type: application/json' -d '{\"model_path\":\"meta-llama/Llama-3.1-70B-Instruct\",\"system\":\"h200_sxm\",\"isl\":2048,\"osl\":128,\"ttft\":1000}' --max-time 90)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/gpu-sizer -H 'Content-Type: application/json' -d '{\"model_path\":\"meta-llama/Llama-3.1-70B-Instruct\",\"system\":\"h200_sxm\",\"isl\":2048,\"osl\":128,\"ttft\":1000,\"username\":\"hacker\",\"password\":\"evil\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/gpu-sizer -H 'Content-Type: application/json' -d '{\"model_path\":\"meta-llama/Llama-3.1-70B-Instruct\",\"system\":\"h200_sxm\",\"isl\":20480,\"osl\":128,\"ttft\":1000}')",
+      "Bash(curl -s -X POST http://163.74.81.138:7860/gpu_sizer -H 'Content-Type: application/json' -d '{\"model_path\":\"meta-llama/Llama-3.1-70B-Instruct\",\"system\":\"h200_sxm\",\"isl\":20480,\"osl\":128,\"ttft\":1000,\"username\":\"rh-admin\",\"password\":\"TKuquV42nZADo69\"}' --max-time 90)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/calculator)"
+    ]
+  }
+}
