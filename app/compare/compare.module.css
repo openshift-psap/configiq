@@ -211,3 +211,5 @@
     opacity: 1;
   }
 }
+.pageTitle { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin: 8px 0 4px; }
+.subtitle { font-size: 15px; color: var(--t2); margin: 0; }

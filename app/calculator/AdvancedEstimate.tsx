@@ -241,7 +241,7 @@ export default function AdvancedEstimate() {
     <div className={styles.page}>
       {/* ─── Header ─── */}
       <div className={styles.header}>
-        <h1 className={styles.pageTitle}>GPU requirement sizing</h1>
+        <h1 className={styles.pageTitle}>Advanced sizing</h1>
         <p className={styles.subtitle}>
           Start with just a model name — we fill the rest, then let you tune every assumption.
         </p>

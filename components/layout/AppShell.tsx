@@ -18,13 +18,14 @@ import {
   HomeIcon,
   BoltIcon,
   CalculatorIcon,
-  SlidersHIcon,
-  CubesIcon,
+  MicrochipIcon,
+  SearchIcon,
+  ListIcon,
   HistoryIcon,
-  DollarSignIcon,
+  CoinsIcon,
+  ServerGroupIcon,
   RouteIcon,
   CogIcon,
-  ListIcon,
 } from "@patternfly/react-icons";
 import { getVersionString, getBuildTimeString, getShortCommit } from "@/lib/version";
 
@@ -157,13 +158,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               isActive={pathname === "/kv-cache"}
             />
             <NavItemWithIcon
-              icon={SlidersHIcon}
-              label="Advanced estimate"
+              icon={MicrochipIcon}
+              label="Advanced sizing"
               href="/calculator"
               isActive={pathname === "/calculator"}
             />
             <NavItemWithIcon
-              icon={CubesIcon}
+              icon={SearchIcon}
               label="GPU explorer"
               href="/gpu-explorer"
               isActive={pathname === "/gpu-explorer"}
@@ -184,20 +185,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div style={groupLabelStyle}>OPTIMIZE</div>
 
             <NavItemWithIcon
-              icon={DollarSignIcon}
+              icon={CoinsIcon}
               label="Hybrid savings"
               href="/hybrid-savings"
               isActive={pathname === "/hybrid-savings"}
             />
             <NavItemWithIcon
-              icon={CubesIcon}
+              icon={ServerGroupIcon}
               label="Cluster cost"
               href="/cluster-cost"
               isActive={pathname === "/cluster-cost"}
             />
             <NavItemWithIcon
               icon={RouteIcon}
-              label="Routing"
+              label="Routing economics"
               href="/routing"
               isActive={pathname === "/routing"}
             />

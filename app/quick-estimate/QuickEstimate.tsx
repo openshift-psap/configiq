@@ -93,6 +93,7 @@ export default function QuickEstimate() {
 
   const [model, setModel] = React.useState('Qwen/Qwen3-32B');
   const [gpu, setGpu] = React.useState('');
+  const [calcTrigger, setCalcTrigger] = React.useState(0);
 
   React.useEffect(() => {
     if (GPU_OPTIONS.length > 0 && !gpu) {
@@ -248,7 +249,7 @@ export default function QuickEstimate() {
     }, 500);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [model, gpu, testConcurrentUsers, testISL, testOSL, aicGpus]);
+  }, [model, gpu, testConcurrentUsers, testISL, testOSL, aicGpus, calcTrigger]);
 
   // Fetch live pricing from Cloudflare Worker
   React.useEffect(() => {
@@ -990,7 +991,14 @@ export default function QuickEstimate() {
 
           {/* Column 3: Calculate button */}
           <div className={styles.calcBtnWrap}>
-            <Button variant="primary" size="lg">Calculate</Button>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => { setTestResult(null); setCalcTrigger(t => t + 1); }}
+              isDisabled={isCalculating || !gpu || !model || catalogLoading}
+            >
+              {isCalculating ? 'Calculating...' : 'Calculate'}
+            </Button>
           </div>
         </div>
 

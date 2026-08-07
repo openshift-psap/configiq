@@ -735,6 +735,9 @@ export default function ClusterCostPage() {
 
   return (
     <ComingSoonRibbon>
+    <div style={{ padding: '16px 24px 0' }}>
+      <h1 style={{ fontFamily: 'var(--display, sans-serif)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em', margin: '8px 0 4px' }}>Cluster cost</h1>
+    </div>
     <div className={styles.content} ref={contentRef}>
       {/* LEFT PANEL */}
       <div className={`${styles.lp} ${styles.panel}`} style={{ width: cols[0], flexShrink: 0 }}>

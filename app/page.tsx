@@ -12,12 +12,13 @@ import {
   Button,
 } from "@patternfly/react-core";
 import {
-  MigrationIcon,
-  ChartBarIcon,
-  CpuIcon,
-  CalculatorIcon,
-  RouteIcon,
   BoltIcon,
+  CalculatorIcon,
+  MicrochipIcon,
+  SearchIcon,
+  CoinsIcon,
+  ServerGroupIcon,
+  RouteIcon,
 } from "@patternfly/react-icons";
 import Link from "next/link";
 
@@ -30,35 +31,42 @@ const tools = [
     icon: <BoltIcon />,
   },
   {
-    title: "KV Cache Calculator",
+    title: "KV cache calculator",
     description:
       "Calculate KV cache memory requirements for any model on supported GPU systems.",
     href: "/kv-cache",
     icon: <CalculatorIcon />,
   },
   {
-    title: "Advanced Calculator",
+    title: "Advanced sizing",
     description:
-      "Detailed inference sizing with batching, quantization, KV cache, and cost modeling.",
+      "Detailed GPU sizing with parallelism, quantization, KV cache, and cost modeling.",
     href: "/calculator",
-    icon: <CpuIcon />,
+    icon: <MicrochipIcon />,
   },
   {
-    title: "GPU Explorer",
+    title: "GPU explorer",
     description:
-      "Compare GPUs across memory, throughput, cost, and availability tiers.",
+      "Search and compare GPUs across memory, throughput, cost, and availability.",
     href: "/gpu-explorer",
-    icon: <ChartBarIcon />,
+    icon: <SearchIcon />,
   },
   {
-    title: "Hybrid Savings",
+    title: "Hybrid savings",
     description:
       "Model cost savings between cloud, on-premise, and hybrid GPU deployment strategies.",
     href: "/hybrid-savings",
-    icon: <MigrationIcon />,
+    icon: <CoinsIcon />,
   },
   {
-    title: "Routing Economics",
+    title: "Cluster cost",
+    description:
+      "Estimate total cost of ownership for multi-GPU inference clusters.",
+    href: "/cluster-cost",
+    icon: <ServerGroupIcon />,
+  },
+  {
+    title: "Routing economics",
     description:
       "Analyze request routing between model tiers to optimize cost vs quality tradeoffs.",
     href: "/routing",
@@ -87,19 +95,20 @@ export default function HomePage() {
       </PageSection>
 
       <PageSection>
-        <Grid hasGutter md={6} xl={4}>
+        <Grid hasGutter sm={12} md={6} lg={4}>
           {tools.map((tool) => (
             <GridItem key={tool.href}>
-              <Card isFullHeight isClickable>
+              <Card isFullHeight>
                 <CardTitle>
-                  <span style={{ marginRight: "0.5rem" }}>{tool.icon}</span>
-                  {tool.title}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {tool.icon}
+                    {tool.title}
+                  </span>
                 </CardTitle>
                 <CardBody>
-                  <TextContent>
-                    <Text component="p">{tool.description}</Text>
-                  </TextContent>
-                  <br />
+                  <Text component="p" style={{ marginBottom: 16 }}>
+                    {tool.description}
+                  </Text>
                   <Button
                     variant="link"
                     isInline

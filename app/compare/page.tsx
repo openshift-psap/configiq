@@ -255,10 +255,10 @@ export default function ComparePage() {
 
   return (
     <>
-      <PageSection variant="light">
-        <Title headingLevel="h1" size="2xl">Saved Results</Title>
-        <Text>Compare workloads side by side. Save from Quick Estimate.</Text>
-      </PageSection>
+      <div style={{ padding: '20px 24px 0' }}>
+        <h1 className={styles.pageTitle}>Compare saved results</h1>
+        <p className={styles.subtitle}>Compare workloads side by side. Save from Quick Estimate.</p>
+      </div>
 
       <PageSection>
         {/* Toolbar */}

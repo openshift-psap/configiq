@@ -2,15 +2,14 @@
 import { PageSection, Title, TextContent, EmptyState, EmptyStateBody } from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
 import ComingSoonRibbon from "@/components/ComingSoonRibbon/ComingSoonRibbon";
+import styles from './hybrid-savings.module.css';
 
 export default function HybridSavingsPage() {
   return (
     <ComingSoonRibbon>
-      <PageSection variant="light">
-        <TextContent>
-          <Title headingLevel="h1" size="2xl">Hybrid Savings</Title>
-        </TextContent>
-      </PageSection>
+      <div style={{ padding: '20px 24px 0' }}>
+        <h1 className={styles.pageTitle}>Hybrid savings</h1>
+      </div>
       <PageSection>
         <EmptyState>
           <CubesIcon />

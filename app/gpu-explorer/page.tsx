@@ -16,6 +16,7 @@ import {
 } from "@patternfly/react-core";
 import { GPU_CATALOG } from '@/lib/gpu-math/gpus';
 import { GpuBubbleChart } from './GpuBubbleChart';
+import styles from './gpu-explorer.module.css';
 
 type Preset = 'balanced' | 'cost-efficiency' | 'performance';
 type XAxis = 'vram' | 'price' | 'throughput-index' | 'mem-bw';
@@ -122,14 +123,10 @@ export default function GpuExplorerPage() {
 
   return (
     <>
-      <PageSection variant="light">
-        <TextContent>
-          <Title headingLevel="h1" size="2xl">GPU Explorer</Title>
-          <Text>
-            LLM inference planning — compare GPU generations by memory, bandwidth, and cost efficiency
-          </Text>
-        </TextContent>
-      </PageSection>
+      <div style={{ padding: '20px 24px 0' }}>
+        <h1 className={styles.pageTitle}>GPU explorer</h1>
+        <p className={styles.subtitle}>LLM inference planning — compare GPU generations by memory, bandwidth, and cost efficiency</p>
+      </div>
 
       <PageSection>
         <Card>
