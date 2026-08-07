@@ -35,23 +35,33 @@ function mapSystem(s: Record<string, unknown>): GpuOption {
 }
 
 // Module-level cache — shared across all components, survives re-renders
+// TTL of 10 minutes so new models appear without a hard refresh
+const CACHE_TTL_MS = 10 * 60 * 1000
 let cachedGpus: GpuOption[] | null = null
 let cachedModels: string[] | null = null
+let cacheTimestamp: number | null = null
 let fetchPromise: Promise<void> | null = null
 
+function isCacheValid(): boolean {
+  return cachedGpus !== null && cachedModels !== null &&
+    cacheTimestamp !== null && Date.now() - cacheTimestamp < CACHE_TTL_MS
+}
+
 export function useAicCatalog(): AicCatalog {
-  const [gpuOptions, setGpuOptions] = useState<GpuOption[]>(cachedGpus ?? [])
-  const [modelOptions, setModelOptions] = useState<string[]>(cachedModels ?? [])
-  const [isLoading, setIsLoading] = useState(cachedGpus === null)
+  const [gpuOptions, setGpuOptions] = useState<GpuOption[]>(isCacheValid() ? cachedGpus! : [])
+  const [modelOptions, setModelOptions] = useState<string[]>(isCacheValid() ? cachedModels! : [])
+  const [isLoading, setIsLoading] = useState(!isCacheValid())
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (cachedGpus !== null && cachedModels !== null) {
-      setGpuOptions(cachedGpus)
-      setModelOptions(cachedModels)
+    if (isCacheValid()) {
+      setGpuOptions(cachedGpus!)
+      setModelOptions(cachedModels!)
       setIsLoading(false)
       return
     }
+
+    fetchPromise = null  // reset so stale cache triggers a fresh fetch
 
     let cancelled = false
     const aicUrl = process.env.NEXT_PUBLIC_AICONFIGURATOR_API_URL || 'https://www.aiconfigurator.dev'
@@ -82,6 +92,7 @@ export function useAicCatalog(): AicCatalog {
 
           cachedGpus = gpus
           cachedModels = modelList
+          cacheTimestamp = Date.now()
         })()
       }
 
