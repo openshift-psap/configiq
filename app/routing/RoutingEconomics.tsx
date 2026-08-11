@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Switch } from '@patternfly/react-core'
+import { Switch, FormSelect, FormSelectOption } from '@patternfly/react-core'
 import { useCountUp } from '@/app/performance-estimate/quickEstimateHelpers'
 import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
 import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
@@ -251,44 +251,44 @@ export default function RoutingEconomics() {
 
                     <div className={styles.backField}>
                       <label className={styles.backFieldLabel}>Frontier model</label>
-                      <select
-                        className={styles.backSelect}
+                      <FormSelect
                         value={tier.frontierModelId}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => { e.stopPropagation(); updateTier(tier.id, { frontierModelId: e.target.value }) }}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        onChange={(_e, val) => { updateTier(tier.id, { frontierModelId: val }) }}
+                        aria-label="Frontier model"
                       >
                         {FRONTIER_MODELS.map(m => (
-                          <option key={m.id} value={m.id}>{m.name} — ${m.pricePerMInput}/${m.pricePerMOutput}</option>
+                          <FormSelectOption key={m.id} value={m.id} label={`${m.name} — $${m.pricePerMInput}/$${m.pricePerMOutput}`} />
                         ))}
-                      </select>
+                      </FormSelect>
                     </div>
 
                     <div className={styles.backField}>
                       <label className={styles.backFieldLabel}>Open model</label>
-                      <select
-                        className={styles.backSelect}
+                      <FormSelect
                         value={tier.ossModelId}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => { e.stopPropagation(); updateTier(tier.id, { ossModelId: e.target.value }) }}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        onChange={(_e, val) => { updateTier(tier.id, { ossModelId: val }) }}
+                        aria-label="Open model"
                       >
                         {OPEN_MODELS.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
+                          <FormSelectOption key={m.id} value={m.id} label={m.name} />
                         ))}
-                      </select>
+                      </FormSelect>
                     </div>
 
                     <div className={styles.backField}>
                       <label className={styles.backFieldLabel}>GPU type</label>
-                      <select
-                        className={styles.backSelect}
+                      <FormSelect
                         value={tier.gpuType}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => { e.stopPropagation(); updateTier(tier.id, { gpuType: e.target.value }) }}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        onChange={(_e, val) => { updateTier(tier.id, { gpuType: val }) }}
+                        aria-label="GPU type"
                       >
                         {aicGpus.map(g => (
-                          <option key={g.systemId} value={g.systemId}>{g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}</option>
+                          <FormSelectOption key={g.systemId} value={g.systemId} label={`${g.label}${g.vramGb ? ` — ${g.vramGb} GB` : ''}`} />
                         ))}
-                      </select>
+                      </FormSelect>
                     </div>
 
                     <div className={styles.backRow}>
