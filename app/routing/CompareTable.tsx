@@ -3,17 +3,17 @@
 import { type TierCostResult, type TierState } from '@/lib/routing/calc'
 import { type FrontierModel } from '@/lib/pricing/frontier-models'
 import { type TierConfig } from '@/lib/routing/tier-defaults'
-import { MODEL_CATALOG } from '@/lib/gpu-math/models'
 import styles from './routing.module.css'
 
-function fmtCost(v: number): string {
+function fmtCost(v: number | null): string {
+  if (v == null) return '—'
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`
   return `$${v.toFixed(2)}`
 }
 
-function fmtPerQuery(annual: number, dailyQueries: number): string {
-  if (dailyQueries <= 0) return '—'
+function fmtPerQuery(annual: number | null, dailyQueries: number): string {
+  if (annual == null || dailyQueries <= 0) return '—'
   const perQuery = annual / (dailyQueries * 365)
   if (perQuery < 0.001) return `$${perQuery.toFixed(6)}`
   if (perQuery < 0.01) return `$${perQuery.toFixed(4)}`
@@ -26,7 +26,7 @@ interface Props {
   tierConfigs: TierConfig[]
   frontierModels: FrontierModel[]
   totalFrontier: number
-  totalSelfHosted: number
+  totalSelfHosted: number | null
 }
 
 export default function CompareTable({
@@ -53,7 +53,7 @@ export default function CompareTable({
           const tier = tiers[i]
           const config = tierConfigs[i]
           const frontier = frontierModels.find(m => m.id === tier.frontierModelId)
-          const ossModel = MODEL_CATALOG.find(m => m.id === tier.ossModelId)
+          const ossModelName = tier.ossModelId.split('/').pop() ?? tier.ossModelId
 
           return (
             <tr key={`${config.id}`}>
@@ -75,7 +75,7 @@ export default function CompareTable({
                     <tr>
                       <td>
                         <span className={styles.tierDot} style={{ background: config.color }} />
-                        {ossModel?.name ?? tier.ossModelId}
+                        {ossModelName}
                       </td>
                       <td>
                         <span className={`${styles.typeBadge} ${styles.typeSelfHosted}`}>Self-hosted</span>

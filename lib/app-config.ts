@@ -1,6 +1,8 @@
 export interface AppConfig {
   defaultModel: string;
   defaultSystem: string;
+  defaultOpenModel: string;
+  defaultFrontierModel: string;
   defaultBackend: string;
   backendVersions: Record<string, string>;
   supportedModels: string[];
@@ -11,6 +13,8 @@ export interface AppConfig {
 const FALLBACK: AppConfig = {
   defaultModel: 'Qwen/Qwen3-32B',
   defaultSystem: 'h200_sxm',
+  defaultOpenModel: 'Qwen/Qwen3-32B',
+  defaultFrontierModel: 'claude-fable-5',
   defaultBackend: 'vllm',
   backendVersions: {
     'vllm': '0.24.0',
@@ -32,6 +36,8 @@ export async function loadAppConfig(): Promise<AppConfig> {
     cached = {
       defaultModel: data.defaultModel ?? FALLBACK.defaultModel,
       defaultSystem: data.defaultSystem ?? FALLBACK.defaultSystem,
+      defaultOpenModel: data.defaultOpenModel ?? FALLBACK.defaultOpenModel,
+      defaultFrontierModel: data.defaultFrontierModel ?? FALLBACK.defaultFrontierModel,
       defaultBackend: data.defaultBackend ?? FALLBACK.defaultBackend,
       backendVersions: data.backendVersions ?? FALLBACK.backendVersions,
       supportedModels: data.supportedModels ?? FALLBACK.supportedModels,

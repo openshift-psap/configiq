@@ -7,8 +7,8 @@ import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
 import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
 import { DEFAULT_TIERS } from '@/lib/routing/tier-defaults'
 import { type TierState, computeAllTiers, computeCostVolumePoints, findBreakeven } from '@/lib/routing/calc'
-import { GPU_CATALOG } from '@/lib/gpu-math/gpus'
-import { MODEL_CATALOG } from '@/lib/gpu-math/models'
+import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
+import { getAppConfig } from '@/lib/app-config'
 import CostVolumeChart from './CostVolumeChart'
 import CompareTable from './CompareTable'
 import styles from './routing.module.css'
@@ -25,28 +25,34 @@ function fmtNum(v: number): string {
   return `${v}`
 }
 
+function inferVendor(modelId: string): string {
+  const ns = modelId.split('/')[0].toLowerCase()
+  if (ns === 'meta-llama') return 'Meta'
+  if (ns === 'mistralai') return 'Mistral'
+  if (ns === 'google') return 'Google'
+  if (ns === 'qwen') return 'Qwen'
+  if (ns === 'deepseek-ai') return 'DeepSeek'
+  if (ns === 'nvidia') return 'NVIDIA'
+  if (ns === 'minimaxai' || ns === 'minimax-ai') return 'MiniMax'
+  if (ns === 'moonshotai') return 'Moonshot'
+  return modelId.split('/')[0]
+}
+
 function initTiers(): TierState[] {
+  const cfg = getAppConfig()
   return DEFAULT_TIERS.map(d => ({
     id: d.id,
     pct: d.defaultPct,
     tokensIn: d.defaultTokensIn,
     tokensOut: d.defaultTokensOut,
-    frontierModelId: d.defaultFrontierModelId,
-    ossModelId: d.defaultOssModelId,
+    frontierModelId: d.defaultFrontierModelId ?? cfg.defaultFrontierModel,
+    ossModelId: d.defaultOssModelId ?? cfg.defaultOpenModel,
     gpuType: d.defaultGpuType,
     gpuPerReplica: d.defaultGpuPerReplica,
     capacityPerReplica: d.defaultCapacityPerReplica,
   }))
 }
 
-const OSS_MODELS = MODEL_CATALOG.filter(m =>
-  ['Meta', 'Mistral', 'Google', 'Qwen', 'DeepSeek'].includes(m.vendor) &&
-  !m.tags?.includes('Vision')
-)
-
-const GPU_OPTIONS = GPU_CATALOG.filter(g =>
-  ['h100-80gb', 'h200-141gb', 'a100-80gb', 'a100-40gb', 'l40s-48gb', 'b200-192gb', 'mi300x-192gb'].includes(g.id)
-)
 
 export default function RoutingEconomics() {
   const [users, setUsers] = React.useState(1000)
@@ -58,6 +64,15 @@ export default function RoutingEconomics() {
   const [flipped, setFlipped] = React.useState<Record<string, boolean>>({})
   const [tiers, setTiers] = React.useState<TierState[]>(initTiers)
   const [livePricing, setLivePricing] = React.useState<Record<string, number>>({})
+  const { modelOptions: aicModels, gpuOptions: aicGpus } = useAicCatalog()
+
+  const OPEN_MODELS = React.useMemo(() => aicModels.map(id => ({
+    id,
+    name: id.split('/').pop() ?? id,
+    vendor: inferVendor(id),
+  })).filter(m =>
+    ['Meta', 'Mistral', 'Google', 'Qwen', 'DeepSeek', 'NVIDIA', 'MiniMax', 'Moonshot'].includes(m.vendor)
+  ), [aicModels])
 
   React.useEffect(() => {
     const fetchPricing = async () => {
@@ -73,9 +88,7 @@ export default function RoutingEconomics() {
           })
           setLivePricing(pricing)
         }
-      } catch {
-        // Use fallback rates
-      }
+      } catch { /* no live pricing available */ }
     }
     fetchPricing()
   }, [])
@@ -97,9 +110,10 @@ export default function RoutingEconomics() {
 
   const breakeven = React.useMemo(() => findBreakeven(volumePoints), [volumePoints])
 
-  const animSavings = useCountUp(result.savings, 800)
+  const costKnown = result.totalSelfHosted != null
+  const animSavings = useCountUp(result.savings ?? 0, 800)
   const animFrontier = useCountUp(result.totalFrontier, 800)
-  const animSelfHosted = useCountUp(result.totalSelfHosted, 800)
+  const animSelfHosted = useCountUp(result.totalSelfHosted ?? 0, 800)
 
   function handlePctChange(changedId: string, newPct: number) {
     setTiers(prev => {
@@ -191,7 +205,7 @@ export default function RoutingEconomics() {
           const tierResult = result.tiers[i]
           const isFlipped = flipped[tier.id] ?? false
           const frontierModel = FRONTIER_MODELS.find(m => m.id === tier.frontierModelId)
-          const ossModel = OSS_MODELS.find(m => m.id === tier.ossModelId)
+          const ossModel = OPEN_MODELS.find(m => m.id === tier.ossModelId)
 
           return (
             <div key={tier.id} className={styles.tierCard}>
@@ -250,14 +264,14 @@ export default function RoutingEconomics() {
                     </div>
 
                     <div className={styles.backField}>
-                      <label className={styles.backFieldLabel}>OSS model</label>
+                      <label className={styles.backFieldLabel}>Open model</label>
                       <select
                         className={styles.backSelect}
                         value={tier.ossModelId}
                         onClick={e => e.stopPropagation()}
                         onChange={e => { e.stopPropagation(); updateTier(tier.id, { ossModelId: e.target.value }) }}
                       >
-                        {OSS_MODELS.map(m => (
+                        {OPEN_MODELS.map(m => (
                           <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
                       </select>
@@ -271,8 +285,8 @@ export default function RoutingEconomics() {
                         onClick={e => e.stopPropagation()}
                         onChange={e => { e.stopPropagation(); updateTier(tier.id, { gpuType: e.target.value }) }}
                       >
-                        {GPU_OPTIONS.map(g => (
-                          <option key={g.id} value={g.id}>{g.display_name}</option>
+                        {aicGpus.map(g => (
+                          <option key={g.systemId} value={g.systemId}>{g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}</option>
                         ))}
                       </select>
                     </div>
@@ -350,14 +364,14 @@ export default function RoutingEconomics() {
         <div className={`${styles.heroCard} ${styles.heroDark}`}>
           <div className={styles.heroLabel}>Annual savings</div>
           <div className={styles.heroValue}>
-            {result.savings >= 0 ? '' : '−'}{fmtCost(Math.abs(animSavings))}
+            {costKnown ? <>{result.savings! >= 0 ? '' : '−'}{fmtCost(Math.abs(animSavings))}</> : '—'}
           </div>
-          {result.savingsPct > 0 && (
-            <span className={styles.heroSavingsPct}>{result.savingsPct.toFixed(0)}% less</span>
+          {costKnown && (result.savingsPct ?? 0) > 0 && (
+            <span className={styles.heroSavingsPct}>{result.savingsPct!.toFixed(0)}% less</span>
           )}
           <div className={styles.heroSub}>
-            {result.savings > 0
-              ? 'Self-hosted saves vs frontier API'
+            {!costKnown ? 'GPU pricing unavailable — connect Costings API'
+              : result.savings! > 0 ? 'Self-hosted saves vs frontier API'
               : 'Frontier API is cheaper at this scale'}
           </div>
         </div>
@@ -372,7 +386,7 @@ export default function RoutingEconomics() {
 
         <div className={styles.heroCard}>
           <div className={styles.heroLabel}>Self-hosted cost</div>
-          <div className={styles.heroValue}>{fmtCost(animSelfHosted)}</div>
+          <div className={styles.heroValue}>{costKnown ? fmtCost(animSelfHosted) : '—'}</div>
           <div className={styles.heroSub}>
             {result.tiers.reduce((s, t) => s + t.gpuCount, 0)} GPUs total &middot;{' '}
             {mode === 'cloud' ? 'cloud rental' : 'hardware amortization'}

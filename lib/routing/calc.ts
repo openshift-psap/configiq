@@ -15,7 +15,7 @@ export interface TierState {
 export interface TierCostResult {
   tierId: string
   frontierAnnual: number
-  selfHostedAnnual: number
+  selfHostedAnnual: number | null  // null when GPU pricing unavailable
   replicas: number
   gpuCount: number
   dailyQueries: number
@@ -24,9 +24,9 @@ export interface TierCostResult {
 export interface RoutingResult {
   tiers: TierCostResult[]
   totalFrontier: number
-  totalSelfHosted: number
-  savings: number
-  savingsPct: number
+  totalSelfHosted: number | null
+  savings: number | null
+  savingsPct: number | null
 }
 
 export function computeFrontierCost(
@@ -47,14 +47,14 @@ export function computeSelfHostedCost(
   tier: TierState,
   users: number,
   concurrencyPct: number,
-  hourlyRate: number,
-): { annualCost: number; replicas: number; gpuCount: number } {
+  hourlyRate: number | null,
+): { annualCost: number | null; replicas: number; gpuCount: number } {
   const peakConcurrent = users * (concurrencyPct / 100) * 1.2
   const peakTierReqs = peakConcurrent * (tier.pct / 100)
   const replicas = Math.max(1, Math.ceil(peakTierReqs / tier.capacityPerReplica))
   const gpuCount = replicas * tier.gpuPerReplica
-  const monthlyCost = gpuCount * hourlyRate * 24 * 30
-  return { annualCost: monthlyCost * 12, replicas, gpuCount }
+  if (hourlyRate == null) return { annualCost: null, replicas, gpuCount }
+  return { annualCost: gpuCount * hourlyRate * 24 * 30 * 12, replicas, gpuCount }
 }
 
 export function computeAllTiers(
@@ -63,7 +63,7 @@ export function computeAllTiers(
   queriesPerUserPerDay: number,
   concurrencyPct: number,
   frontierModels: FrontierModel[],
-  getRate: (gpuId: string) => number,
+  getRate: (gpuId: string) => number | null,
 ): RoutingResult {
   const dailyQueries = users * queriesPerUserPerDay
 
@@ -83,9 +83,10 @@ export function computeAllTiers(
   })
 
   const totalFrontier = results.reduce((s, r) => s + r.frontierAnnual, 0)
-  const totalSelfHosted = results.reduce((s, r) => s + r.selfHostedAnnual, 0)
-  const savings = totalFrontier - totalSelfHosted
-  const savingsPct = totalFrontier > 0 ? (savings / totalFrontier) * 100 : 0
+  const anyNull = results.some(r => r.selfHostedAnnual == null)
+  const totalSelfHosted = anyNull ? null : results.reduce((s, r) => s + (r.selfHostedAnnual ?? 0), 0)
+  const savings = totalSelfHosted != null ? totalFrontier - totalSelfHosted : null
+  const savingsPct = savings != null && totalFrontier > 0 ? (savings / totalFrontier) * 100 : null
 
   return { tiers: results, totalFrontier, totalSelfHosted, savings, savingsPct }
 }
@@ -93,7 +94,7 @@ export function computeAllTiers(
 export interface VolumePoint {
   dailyQueries: number
   frontier: number
-  selfHosted: number
+  selfHosted: number | null
 }
 
 const VOLUME_MULTIPLIERS = [0, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3]
@@ -104,7 +105,7 @@ export function computeCostVolumePoints(
   queriesPerUserPerDay: number,
   concurrencyPct: number,
   frontierModels: FrontierModel[],
-  getRate: (gpuId: string) => number,
+  getRate: (gpuId: string) => number | null,
 ): VolumePoint[] {
   return VOLUME_MULTIPLIERS.map(m => {
     const users = Math.round(baseUsers * m)
@@ -117,6 +118,7 @@ export function findBreakeven(points: VolumePoint[]): number | null {
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1]
     const curr = points[i]
+    if (prev.selfHosted == null || curr.selfHosted == null) continue
     const prevDiff = prev.frontier - prev.selfHosted
     const currDiff = curr.frontier - curr.selfHosted
 

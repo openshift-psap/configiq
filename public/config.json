@@ -1,6 +1,8 @@
 {
   "defaultModel": "Qwen/Qwen3-32B",
   "defaultSystem": "h200_sxm",
+  "defaultOpenModel": "Qwen/Qwen3-32B",
+  "defaultFrontierModel": "claude-fable-5",
   "defaultBackend": "vllm",
   "backendVersions": {
     "vllm": "0.24.0",

@@ -31,7 +31,7 @@ export default function CostVolumeChart({ points, breakeven, currentDailyQueries
   if (points.length < 2) return null
 
   const maxQ = Math.max(...points.map(p => p.dailyQueries))
-  const maxCost = Math.max(...points.map(p => Math.max(p.frontier, p.selfHosted)))
+  const maxCost = Math.max(...points.map(p => Math.max(p.frontier, p.selfHosted ?? 0)))
   const safeMaxCost = maxCost || 1
 
   const nx = (q: number) => PAD.left + (q / (maxQ || 1)) * PW
@@ -41,7 +41,8 @@ export default function CostVolumeChart({ points, breakeven, currentDailyQueries
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${nx(p.dailyQueries).toFixed(1)},${ny(p.frontier).toFixed(1)}`)
     .join(' ')
   const selfHostedPath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${nx(p.dailyQueries).toFixed(1)},${ny(p.selfHosted).toFixed(1)}`)
+    .filter(p => p.selfHosted != null)
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${nx(p.dailyQueries).toFixed(1)},${ny(p.selfHosted!).toFixed(1)}`)
     .join(' ')
 
   const lastPt = points[points.length - 1]
@@ -92,8 +93,8 @@ export default function CostVolumeChart({ points, breakeven, currentDailyQueries
           <g key={i}>
             <circle cx={nx(p.dailyQueries)} cy={ny(p.frontier)} r={p.dailyQueries === currentDailyQueries ? 4 : 2}
               fill="var(--gc-c-orange, #b8390e)" />
-            <circle cx={nx(p.dailyQueries)} cy={ny(p.selfHosted)} r={p.dailyQueries === currentDailyQueries ? 4 : 2}
-              fill="var(--gc-success, #3e8635)" />
+            {p.selfHosted != null && <circle cx={nx(p.dailyQueries)} cy={ny(p.selfHosted)} r={p.dailyQueries === currentDailyQueries ? 4 : 2}
+              fill="var(--gc-success, #3e8635)" />}
           </g>
         ))}
 
