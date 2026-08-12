@@ -9,6 +9,7 @@ import {
   Masthead,
   MastheadMain,
   MastheadBrand,
+  MastheadContent,
   MastheadToggle,
   Nav,
   NavList,
@@ -72,16 +73,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </MastheadBrand>
       </MastheadMain>
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <a href="https://github.com/redhat-performance/configiq" target="_blank" rel="noopener" aria-label="GitHub repository" style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', padding: 8 }}>
+      <MastheadContent>
+        <a href="https://github.com/redhat-performance/configiq" target="_blank" rel="noopener" aria-label="GitHub repository" style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', padding: 8, marginLeft: 'auto' }}>
           <GithubIcon style={{ width: 21, height: 21 }} />
         </a>
-        <MastheadToggle>
-          <PageToggleButton variant="plain" aria-label="Navigation" id="nav-toggle">
-            <BarsIcon color="white" />
-          </PageToggleButton>
-        </MastheadToggle>
-      </div>
+      </MastheadContent>
+      <MastheadToggle>
+        <PageToggleButton variant="plain" aria-label="Navigation" id="nav-toggle">
+          <BarsIcon color="white" />
+        </PageToggleButton>
+      </MastheadToggle>
     </Masthead>
   );
 
