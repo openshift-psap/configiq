@@ -5,13 +5,17 @@ import {
   Page,
   PageSidebar,
   PageSidebarBody,
+  PageToggleButton,
   Masthead,
   MastheadMain,
   MastheadBrand,
+  MastheadToggle,
   Nav,
   NavList,
   NavItem,
 } from "@patternfly/react-core";
+import BarsIcon from "@patternfly/react-icons/dist/esm/icons/bars-icon";
+import GithubIcon from "@patternfly/react-icons/dist/esm/icons/github-icon";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -68,6 +72,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </MastheadBrand>
       </MastheadMain>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <a href="https://github.com/redhat-performance/configiq" target="_blank" rel="noopener" aria-label="GitHub repository" style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', padding: 8 }}>
+          <GithubIcon style={{ width: 21, height: 21 }} />
+        </a>
+        <MastheadToggle>
+          <PageToggleButton variant="plain" aria-label="Navigation" id="nav-toggle">
+            <BarsIcon color="white" />
+          </PageToggleButton>
+        </MastheadToggle>
+      </div>
     </Masthead>
   );
 
@@ -240,6 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       header={masthead}
       sidebar={sidebar}
       isManagedSidebar
+      defaultManagedSidebarIsOpen={true}
       style={{ backgroundColor: "#f5f5f5" }}
     >
       {children}

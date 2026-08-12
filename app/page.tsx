@@ -70,10 +70,7 @@ export default function HomePage() {
   return (
     <>
       <PageSection variant="light">
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 0, right: 0, fontSize: '0.875rem', color: '#6A6E73' }}>
-            Work in progress
-          </div>
+        <div>
           <TextContent>
             <Title headingLevel="h1" size="2xl">
               ConfigIQ
