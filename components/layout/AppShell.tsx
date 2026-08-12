@@ -181,6 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               isActive={false}
             />}
 
+            {false && <>
             <div style={groupLabelStyle}>COSTINGS</div>
 
             <NavItemWithIcon
@@ -201,6 +202,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/routing"
               isActive={pathname === "/routing"}
             />
+            </>}
 
             <div style={groupLabelStyle}>SYSTEM</div>
 

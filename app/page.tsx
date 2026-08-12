@@ -50,20 +50,21 @@ const tools = [
     href: "/performance-estimate",
     icon: <BoltIcon />,
   },
-  {
-    title: "Hybrid Savings",
-    description:
-      "Model cost savings between cloud, on-premise, and hybrid GPU deployment strategies.",
-    href: "/hybrid-savings",
-    icon: <MigrationIcon />,
-  },
-  {
-    title: "Routing economics",
-    description:
-      "Analyze request routing between model tiers to optimize cost vs quality tradeoffs.",
-    href: "/routing",
-    icon: <RouteIcon />,
-  },
+  // Hidden pending aicostings API
+  // {
+  //   title: "Hybrid Savings",
+  //   description:
+  //     "Model cost savings between cloud, on-premise, and hybrid GPU deployment strategies.",
+  //   href: "/hybrid-savings",
+  //   icon: <MigrationIcon />,
+  // },
+  // {
+  //   title: "Routing economics",
+  //   description:
+  //     "Analyze request routing between model tiers to optimize cost vs quality tradeoffs.",
+  //   href: "/routing",
+  //   icon: <RouteIcon />,
+  // },
 ];
 
 export default function HomePage() {
