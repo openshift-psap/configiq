@@ -55,15 +55,14 @@
 }
 .inputRow {
   display: grid;
-  grid-template-columns: minmax(280px, 1.6fr) minmax(220px, 1fr) auto;
+  grid-template-columns: 1.6fr 1fr;
   gap: 16px;
-  align-items: end;
 }
 @media (max-width: 700px) {
   .inputRow { grid-template-columns: 1fr; }
 }
 
-.field { display: flex; flex-direction: column; gap: 6px; }
+.field { display: flex; flex-direction: column; }
 .fieldLabel {
   font-family: var(--mono);
   font-size: 12px;
@@ -71,6 +70,8 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--t2);
+  line-height: 1.2;
+  margin-bottom: 6px;
 }
 
 .modelInputWrapper {

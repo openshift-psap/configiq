@@ -18,6 +18,8 @@ import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
+import { ModelInput } from '@/components/ui/ModelInput';
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 
 function modelSuggestions(): string {
   const names = getAppConfig().suggestedModelNames;
@@ -236,79 +238,19 @@ export default function AdvancedEstimate() {
         {/* Model + GPU row */}
         <div className={styles.inputGrid}>
           <div>
-            <label className={styles.fieldLabel}>
-              Model — Hugging Face ID
-              <StatusChip status={modelStatus} />
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                className={styles.modelInput}
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                list="model-options"
-                placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="model-options">
-                {MODEL_OPTIONS.map(m => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {modelStatus === 'supported' && (
-                  <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                )}
-                {modelStatus === 'catalog' && (
-                  <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                )}
-                {modelStatus === 'fetching' && (
-                  <Label color="grey" isCompact>Checking...</Label>
-                )}
-                {modelStatus === 'fetched' && (
-                  <Label color="gold" isCompact icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                )}
-                {modelStatus === 'error' && (
-                  <Label color="red" isCompact icon={<ExclamationTriangleIcon />}>Not found</Label>
-                )}
-              </div>
-            </div>
-            <div className={styles.helperText}>
-              Supported: {modelSuggestions()} — type to autocomplete
-              {hfToken ? (
-                <span style={{ marginLeft: '8px', color: '#0066cc', fontWeight: 500 }}>🔑 HF token active</span>
-              ) : (
-                <span style={{ marginLeft: '8px' }}>
-                  Gated model?{' '}
-                  <a href="/settings" style={{ color: '#0066cc' }}>Add your HF token in Settings →</a>
-                </span>
-              )}
-            </div>
+            <ModelInput
+              id="adv-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              hfToken={hfToken}
+              status={modelStatus}
+              placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
+            />
           </div>
 
-          <div>
-            <label className={styles.fieldLabel}>GPU system</label>
-            <select
-              className={styles.gpuSelect}
-              value={gpuSystem}
-              onChange={e => setGpuSystem(e.target.value)}
-            >
-              {aicGpus.length === 0
-                ? <option value={gpuSystem} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}
-                    </option>
-                  ))
-              }
-            </select>
-            {currentGpuOption && (
-              <div className={styles.helperText}>
-                {currentGpuOption.vramGb != null && <>{currentGpuOption.vramGb} GB</>}
-                {currentGpuOption.bandwidthTbps != null && <> · {currentGpuOption.bandwidthTbps} TB/s</>}
-                {currentGpuOption.tflopsBf16 != null && <> · {currentGpuOption.tflopsBf16.toFixed(0)} TFLOPS</>}
-              </div>
-            )}
-          </div>
+          <GpuSystemInput id="adv-gpu" value={gpuSystem} onChange={setGpuSystem} gpuOptions={aicGpus} />
         </div>
 
         {/* Calculate button */}

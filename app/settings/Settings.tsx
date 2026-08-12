@@ -5,6 +5,7 @@ import { Button, Label } from '@patternfly/react-core';
 import { EyeIcon, EyeSlashIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
+import { ModelInput } from '@/components/ui/ModelInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import styles from './Settings.module.css';
@@ -110,45 +111,16 @@ export function Settings() {
             )}
           </div>
           <div className={styles.fieldWrap}>
-            <label className={styles.fieldLabel} htmlFor="settings-model">
-              Hugging Face model ID
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                id="settings-model"
-                type="text"
-                list="settings-model-options"
-                value={localModel}
-                onChange={e => setLocalModel(e.target.value)}
-                placeholder={catalogLoading ? 'Loading catalog…' : 'e.g. Qwen/Qwen3-32B'}
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="settings-model-options">
-                {modelOptions.map(m => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {modelStatus === 'supported' && (
-                  <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                )}
-                {modelStatus === 'catalog' && (
-                  <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                )}
-                {modelStatus === 'fetching' && (
-                  <Label color="grey" isCompact>Checking…</Label>
-                )}
-                {modelStatus === 'fetched' && (
-                  <Label color="gold" isCompact icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                )}
-                {modelStatus === 'error' && (
-                  <Label color="red" isCompact icon={<ExclamationTriangleIcon />}>Not found</Label>
-                )}
-              </div>
-            </div>
-            <div className={styles.helperText}>
-              All tools use this model by default. Type to autocomplete from the AIC catalog.
-            </div>
+            <ModelInput
+              id="settings-model"
+              model={localModel}
+              onChange={setLocalModel}
+              modelOptions={modelOptions}
+              isLoading={catalogLoading}
+              status={modelStatus}
+              placeholder={catalogLoading ? 'Loading catalog…' : 'e.g. Qwen/Qwen3-32B'}
+              helperText="All tools use this model by default. Type to autocomplete from the AIC catalog."
+            />
           </div>
         </div>
 

@@ -8,6 +8,8 @@ import { useCountUp } from '@/app/performance-estimate/quickEstimateHelpers'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext'
 import { getAppConfig } from '@/lib/app-config'
+import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput'
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput'
 import type { KvCacheCalcResult } from '@/lib/api/kv-cache-calc'
 import styles from './KvCacheCalc.module.css'
 
@@ -62,6 +64,11 @@ export default function KvCacheCalc() {
   const [debugDuration, setDebugDuration] = React.useState<number | null>(null)
 
   const catalogMatch = MODEL_OPTIONS.includes(model)
+  const kvModelStatus: ModelStatus = getAppConfig().supportedModels.includes(model)
+    ? 'supported'
+    : catalogMatch ? 'catalog'
+    : catalogLoading ? 'fetching'
+    : model ? 'idle' : 'idle'
 
   async function handleCalculate() {
     setLoading(true)
@@ -140,57 +147,20 @@ export default function KvCacheCalc() {
       <div className={styles.inputCard}>
         <div className={styles.inputRow}>
           <div className={styles.field}>
-            <label htmlFor="kv-model" className={styles.fieldLabel}>Model — Hugging Face ID</label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                id="kv-model"
-                list="kv-models"
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                placeholder="Type model name or select from dropdown..."
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="kv-models">
-                {MODEL_OPTIONS.map(m => <option key={m} value={m} />)}
-              </datalist>
-              {model && (
-                <span className={styles.modelChip}>
-                  {getAppConfig().supportedModels.includes(model) ? (
-                    <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                  ) : catalogMatch ? (
-                    <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                  ) : catalogLoading ? (
-                    <Label color="grey" isCompact>Loading...</Label>
-                  ) : (
-                    <Label color="grey" isCompact>Custom model</Label>
-                  )}
-                </span>
-              )}
-            </div>
+            <ModelInput
+              id="kv-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              status={kvModelStatus}
+            />
           </div>
 
-          <div className={styles.field}>
-            <label htmlFor="kv-gpu" className={styles.fieldLabel}>GPU system</label>
-            <select
-              id="kv-gpu"
-              value={system}
-              onChange={e => setSystem(e.target.value)}
-              className={styles.gpuSelect}
-            >
-              {aicGpus.length === 0
-                ? <option value={system} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}
-                    </option>
-                  ))
-              }
-            </select>
-          </div>
+          <GpuSystemInput id="kv-gpu" value={system} onChange={setSystem} gpuOptions={aicGpus} />
+        </div>
 
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
           <button
             type="button"
             className={styles.calcBtn}

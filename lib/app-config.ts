@@ -7,6 +7,7 @@ export interface AppConfig {
   backendVersions: Record<string, string>;
   supportedModels: string[];
   suggestedModelNames: string[];
+  modelRequestUrl: string;
 }
 
 // Hardcoded fallback — used if /config.json fails to load
@@ -23,6 +24,7 @@ const FALLBACK: AppConfig = {
   },
   supportedModels: [],
   suggestedModelNames: [],
+  modelRequestUrl: '',
 };
 
 let cached: AppConfig | null = null;
@@ -42,6 +44,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
       backendVersions: data.backendVersions ?? FALLBACK.backendVersions,
       supportedModels: data.supportedModels ?? FALLBACK.supportedModels,
       suggestedModelNames: data.suggestedModelNames ?? FALLBACK.suggestedModelNames,
+      modelRequestUrl: data.modelRequestUrl ?? FALLBACK.modelRequestUrl,
     };
   } catch {
     cached = FALLBACK;

@@ -29,6 +29,8 @@ import { fetchModelConfig, type HFModelConfig } from '@/lib/huggingface/fetch-co
 import { saveEstimate, getSavedEstimateCount } from '@/lib/saved-estimates';
 import { fetchEstimateAsInferenceResult, EstimateError } from '@/lib/api/estimate-adapter';
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
+import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -77,8 +79,6 @@ export default function QuickEstimate() {
   const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion } = useSettings();
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
-  const MODEL_OPTIONS = aicModels;
-
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
 
@@ -113,6 +113,18 @@ export default function QuickEstimate() {
   const [isFetchingConfig, setIsFetchingConfig] = React.useState(false);
   const [isUsingFallback, setIsUsingFallback] = React.useState(false);
   const [fallbackReason, setFallbackReason] = React.useState<string>('');
+
+  const modelStatus: ModelStatus = getAppConfig().supportedModels.includes(model)
+    ? 'supported'
+    : aicModels.includes(model)
+    ? 'catalog'
+    : isFetchingConfig || catalogLoading
+    ? 'fetching'
+    : hfConfig
+    ? 'fetched'
+    : testError
+    ? 'error'
+    : 'idle';
 
   // Collapsible state for "Why this GPU count?" card
   const [whyGpuExpanded, setWhyGpuExpanded] = React.useState(false);
@@ -161,7 +173,7 @@ export default function QuickEstimate() {
     setFallbackReason('');
 
     // Skip HF fetch for supported and catalog models — we know they work
-    if (getAppConfig().supportedModels.includes(model) || MODEL_OPTIONS.includes(model)) {
+    if (getAppConfig().supportedModels.includes(model) || aicModels.includes(model)) {
       setIsFetchingConfig(false);
       return;
     }
@@ -862,93 +874,32 @@ export default function QuickEstimate() {
       <div className={`${styles.card} ${styles.inputCard}`} data-tour="model">
         <div className={styles.inputRow}>
           {/* Column 1: Model field */}
-          <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="qe-model">
-              Model — Hugging Face ID
-              <InfoCircleIcon style={{ width: 12, height: 12, opacity: 0.7 }} />
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                id="qe-model"
-                list="qe-models"
-                value={model}
-                onChange={(e) => {
-                  console.log('📝 Model input changed to:', e.target.value);
-                  setModel(e.target.value);
-                }}
-                placeholder="Type model name or select from dropdown..."
-                aria-label="Model Hugging Face ID"
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="qe-models">
-                {MODEL_OPTIONS.map((m) => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {getAppConfig().supportedModels.includes(model) ? (
-                  <Label color="blue" icon={<CheckCircleIcon />}>Supported</Label>
-                ) : MODEL_OPTIONS.includes(model) ? (
-                  <Label color="green" icon={<CheckCircleIcon />}>In catalog</Label>
-                ) : isFetchingConfig || catalogLoading ? (
-                  <Label color="grey">Checking...</Label>
-                ) : hfConfig ? (
-                  <Label color="gold" icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                ) : testError ? (
-                  <Label color="red" icon={<ExclamationTriangleIcon />}>Not found</Label>
-                ) : (
-                  <Label color="grey">Type to search...</Label>
-                )}
-              </div>
-            </div>
-            <div className={styles.helperText}>
-              Supported: {modelSuggestions()} — type to autocomplete
-              {hfToken ? (
-                <span style={{ marginLeft: '8px', color: '#0066cc', fontWeight: 500 }}>
-                  🔑 HF token active
-                </span>
-              ) : (
-                <span style={{ marginLeft: '8px' }}>
-                  Gated model?{' '}
-                  <a href="/settings" style={{ color: '#0066cc' }}>Add your HF token in Settings →</a>
-                </span>
-              )}
-            </div>
+          <div>
+            <ModelInput
+              id="qe-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              hfToken={hfToken}
+              status={modelStatus}
+            />
           </div>
 
           {/* Column 2: GPU target */}
-          <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="qe-gpu">GPU system</label>
-            <select
-              id="qe-gpu"
-              value={gpu}
-              onChange={(e) => setGpu(e.target.value)}
-              aria-label="GPU target"
-              className={styles.gpuSelect}
-            >
-              {aicGpus.length === 0
-                ? <option value={gpu} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {gpuOptionLabel(g.label, g.vramGb)}
-                    </option>
-                  ))
-              }
-            </select>
-          </div>
+          <GpuSystemInput id="qe-gpu" value={gpu} onChange={setGpu} gpuOptions={aicGpus} />
 
-          {/* Column 3: Calculate button */}
-          <div className={styles.calcBtnWrap}>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => { setTestResult(null); setCalcTrigger(t => t + 1); }}
-              isDisabled={isCalculating || !gpu || !model || catalogLoading}
-            >
-              {isCalculating ? 'Calculating...' : 'Calculate'}
-            </Button>
-          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => { setTestResult(null); setCalcTrigger(t => t + 1); }}
+            isDisabled={isCalculating || !gpu || !model || catalogLoading}
+          >
+            {isCalculating ? 'Calculating...' : 'Calculate'}
+          </Button>
         </div>
 
       </div>
