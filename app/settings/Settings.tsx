@@ -28,6 +28,7 @@ export function Settings() {
   const [modelSaved, setModelSaved] = React.useState(false);
   const [tokenSaved, setTokenSaved] = React.useState(false);
   const [backendSaved, setBackendSaved] = React.useState(false);
+  const [validatedOpen, setValidatedOpen] = React.useState(false);
 
   // Sync local model input once context has loaded from localStorage
   const modelSynced = React.useRef(false);
@@ -122,6 +123,58 @@ export function Settings() {
               helperText="All tools use this model by default. Type to autocomplete from the AIC catalog."
             />
           </div>
+        </div>
+
+        {/* ── Validated models ── */}
+        <div className={styles.section}>
+          <div
+            className={styles.sectionHead}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setValidatedOpen(o => !o)}
+          >
+            <div>
+              <div className={styles.sectionTitle}>
+                Validated models
+                <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '8px', color: '#6a6e73' }}>
+                  {validatedOpen ? '▲' : '▼'}
+                </span>
+              </div>
+              <div className={styles.sectionDesc}>
+                Models validated for use with the AIConfigurator sizing engine.
+              </div>
+            </div>
+            <Label color="blue" isCompact>{getAppConfig().supportedModels.length} models</Label>
+          </div>
+          {validatedOpen && (
+            <div className={styles.fieldWrap}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 8px' }}>
+                {getAppConfig().supportedModels.map(m => (
+                  <Label
+                    key={m}
+                    color="blue"
+                    isCompact
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                      setLocalModel(m);
+                      setDefaultModel(m);
+                      setModelSaved(true);
+                      setTimeout(() => setModelSaved(false), 2000);
+                    }}
+                  >
+                    {m.split('/').pop()}
+                  </Label>
+                ))}
+              </div>
+              {getAppConfig().modelRequestUrl && (
+                <div style={{ marginTop: '12px', fontSize: '13px' }}>
+                  Don&apos;t see your model?{' '}
+                  <a href={getAppConfig().modelRequestUrl} target="_blank" rel="noopener" style={{ color: '#0066cc' }}>
+                    Request validation →
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── HF token ── */}
