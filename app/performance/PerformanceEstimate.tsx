@@ -20,7 +20,6 @@ import LayerGroupIcon from '@patternfly/react-icons/dist/esm/icons/layer-group-i
 import InfoCircleIcon from '@patternfly/react-icons/dist/esm/icons/info-circle-icon';
 import EyeIcon from '@patternfly/react-icons/dist/esm/icons/eye-icon';
 import EyeSlashIcon from '@patternfly/react-icons/dist/esm/icons/eye-slash-icon';
-
 import styles from './PerformanceEstimate.module.css';
 import { Term, FlipTile, Sparkline, useCountUp } from './quickEstimateHelpers';
 import { ProductTour, type TourStep } from '@/components/ProductTour';
@@ -29,6 +28,8 @@ import { fetchModelConfig, type HFModelConfig } from '@/lib/huggingface/fetch-co
 import { saveEstimate, getSavedEstimateCount } from '@/lib/saved-estimates';
 import { fetchEstimateAsInferenceResult, EstimateError } from '@/lib/api/estimate-adapter';
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
+import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -77,8 +78,6 @@ export default function QuickEstimate() {
   const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion } = useSettings();
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
-  const MODEL_OPTIONS = aicModels;
-
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
 
@@ -114,6 +113,18 @@ export default function QuickEstimate() {
   const [isUsingFallback, setIsUsingFallback] = React.useState(false);
   const [fallbackReason, setFallbackReason] = React.useState<string>('');
 
+  const modelStatus: ModelStatus = getAppConfig().supportedModels.includes(model)
+    ? 'supported'
+    : aicModels.includes(model)
+    ? 'catalog'
+    : isFetchingConfig || catalogLoading
+    ? 'fetching'
+    : hfConfig
+    ? 'fetched'
+    : testError
+    ? 'error'
+    : 'idle';
+
   // Collapsible state for "Why this GPU count?" card
   const [whyGpuExpanded, setWhyGpuExpanded] = React.useState(false);
 
@@ -147,7 +158,45 @@ export default function QuickEstimate() {
   const [calcTrigger, setCalcTrigger] = React.useState(0);
   const [elapsed, setElapsed] = React.useState(0);
   const [testWeightPrecision, setTestWeightPrecision] = React.useState<'FP16' | 'FP8' | 'INT8' | 'INT4'>('FP16');
-  const [testKVCachePrecision, setTestKVCachePrecision] = React.useState<'FP16' | 'FP8'>('FP16');
+  const [testKVCachePrecision, setTestKVCachePrecision] = React.useState<'FP16' | 'FP8'>('FP16');44
+  
+  const [islInput, setIslInput] = React.useState('2048');
+  const [oslInput, setOslInput] = React.useState('128');
+  const [concurrentUsersInput, setConcurrentUsersInput] = React.useState('32');
+  const [tpSizeInput, setTpSizeInput] = React.useState('1');
+
+  const invalidISL = islInput === '' || parseInt(islInput, 10) < 1;
+  const invalidOSL = oslInput === '' || parseInt(oslInput, 10) < 1;
+  const invalidUsers = concurrentUsersInput === '' || parseInt(concurrentUsersInput, 10) < 1;
+  const invalidTpSize = tpSizeInput === '' || parseInt(tpSizeInput, 10) < 1;
+
+  const handleIslChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setIslInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setTestISL(n);
+  };
+
+  const handleOslChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setOslInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setTestOSL(n);
+  };
+
+  const handleConcurrentUsersChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setConcurrentUsersInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setTestConcurrentUsers(n);
+  };
+
+  const handleTpSizeChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setTpSizeInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setTestTpSize(n);
+  };
 
   // Live pricing from Cloudflare Worker
   const [livePricing, setLivePricing] = React.useState<Record<string, number>>({});
@@ -161,7 +210,7 @@ export default function QuickEstimate() {
     setFallbackReason('');
 
     // Skip HF fetch for supported and catalog models — we know they work
-    if (getAppConfig().supportedModels.includes(model) || MODEL_OPTIONS.includes(model)) {
+    if (getAppConfig().supportedModels.includes(model) || aicModels.includes(model)) {
       setIsFetchingConfig(false);
       return;
     }
@@ -638,24 +687,27 @@ export default function QuickEstimate() {
       fields: [
         {
           label: 'Input sequence length (ISL)',
-          value: testISL,
+          value: islInput,
           term: 'isl',
           type: 'number' as const,
-          onChange: (val: string) => setTestISL(Math.max(1, parseInt(val) || 1))
+          invalid: invalidISL,
+          onChange: (val: string) => handleIslChange(val)
         },
         {
           label: 'Output sequence length (OSL)',
-          value: testOSL,
+          value: oslInput,
           term: 'osl',
           type: 'number' as const,
-          onChange: (val: string) => setTestOSL(Math.max(1, parseInt(val) || 1))
+          invalid: invalidOSL,
+          onChange: (val: string) => handleOslChange(val)
         },
         {
           label: 'Concurrent users',
-          value: testConcurrentUsers,
+          value: concurrentUsersInput,
           term: 'concurrent',
           type: 'number' as const,
-          onChange: (val: string) => setTestConcurrentUsers(Math.max(1, parseInt(val) || 1))
+          invalid: invalidUsers,
+          onChange: (val: string) => handleConcurrentUsersChange(val)
         },
       ],
     },
@@ -727,15 +779,16 @@ export default function QuickEstimate() {
       fields: [
         {
           label: 'Tensor parallel size',
-          value: `${testTpSize}`,
+          value: tpSizeInput,
           term: 'tensorParallel',
           readonly: false,
           type: 'number' as const,
-          onChange: (val: string) => setTestTpSize(parseInt(val) || 1),
+          invalid: invalidTpSize,
+          onChange: (val: string) => handleTpSizeChange(val),
         },
         {
           label: 'Total GPUs',
-          value: testResult ? `${testResult.memory_analysis.tp_size * testResult.memory_analysis.replicas}` : `${testTpSize}`,
+          value: testResult ? `${testResult.memory_analysis.tp_size * testResult.memory_analysis.replicas}` : `${tpSizeInput}`,
           readonly: true,
         },
       ],
@@ -862,93 +915,32 @@ export default function QuickEstimate() {
       <div className={`${styles.card} ${styles.inputCard}`} data-tour="model">
         <div className={styles.inputRow}>
           {/* Column 1: Model field */}
-          <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="qe-model">
-              Model — Hugging Face ID
-              <InfoCircleIcon style={{ width: 12, height: 12, opacity: 0.7 }} />
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                id="qe-model"
-                list="qe-models"
-                value={model}
-                onChange={(e) => {
-                  console.log('📝 Model input changed to:', e.target.value);
-                  setModel(e.target.value);
-                }}
-                placeholder="Type model name or select from dropdown..."
-                aria-label="Model Hugging Face ID"
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="qe-models">
-                {MODEL_OPTIONS.map((m) => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {getAppConfig().supportedModels.includes(model) ? (
-                  <Label color="blue" icon={<CheckCircleIcon />}>Supported</Label>
-                ) : MODEL_OPTIONS.includes(model) ? (
-                  <Label color="green" icon={<CheckCircleIcon />}>In catalog</Label>
-                ) : isFetchingConfig || catalogLoading ? (
-                  <Label color="grey">Checking...</Label>
-                ) : hfConfig ? (
-                  <Label color="gold" icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                ) : testError ? (
-                  <Label color="red" icon={<ExclamationTriangleIcon />}>Not found</Label>
-                ) : (
-                  <Label color="grey">Type to search...</Label>
-                )}
-              </div>
-            </div>
-            <div className={styles.helperText}>
-              Supported: {modelSuggestions()} — type to autocomplete
-              {hfToken ? (
-                <span style={{ marginLeft: '8px', color: '#0066cc', fontWeight: 500 }}>
-                  🔑 HF token active
-                </span>
-              ) : (
-                <span style={{ marginLeft: '8px' }}>
-                  Gated model?{' '}
-                  <a href="/settings" style={{ color: '#0066cc' }}>Add your HF token in Settings →</a>
-                </span>
-              )}
-            </div>
+          <div>
+            <ModelInput
+              id="qe-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              hfToken={hfToken}
+              status={modelStatus}
+            />
           </div>
 
           {/* Column 2: GPU target */}
-          <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="qe-gpu">GPU system</label>
-            <select
-              id="qe-gpu"
-              value={gpu}
-              onChange={(e) => setGpu(e.target.value)}
-              aria-label="GPU target"
-              className={styles.gpuSelect}
-            >
-              {aicGpus.length === 0
-                ? <option value={gpu} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {gpuOptionLabel(g.label, g.vramGb)}
-                    </option>
-                  ))
-              }
-            </select>
-          </div>
+          <GpuSystemInput id="qe-gpu" value={gpu} onChange={setGpu} gpuOptions={aicGpus} />
 
-          {/* Column 3: Calculate button */}
-          <div className={styles.calcBtnWrap}>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => { setTestResult(null); setCalcTrigger(t => t + 1); }}
-              isDisabled={isCalculating || !gpu || !model || catalogLoading}
-            >
-              {isCalculating ? 'Calculating...' : 'Calculate'}
-            </Button>
-          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => { setTestResult(null); setCalcTrigger(t => t + 1); }}
+            isDisabled={isCalculating || !gpu || !model || catalogLoading || invalidISL || invalidOSL || invalidUsers || invalidTpSize}
+          >
+            {isCalculating ? 'Calculating...' : 'Calculate'}
+          </Button>
         </div>
 
       </div>
@@ -1619,6 +1611,7 @@ export default function QuickEstimate() {
                             value={String(f.value)}
                             aria-label={f.label}
                             type="number"
+                            validated={f.invalid ? 'error' : 'default'}
                             onChange={(_, val) => f.onChange?.(val)}
                           />
                         ) : (

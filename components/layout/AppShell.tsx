@@ -5,13 +5,18 @@ import {
   Page,
   PageSidebar,
   PageSidebarBody,
+  PageToggleButton,
   Masthead,
   MastheadMain,
   MastheadBrand,
+  MastheadContent,
+  MastheadToggle,
   Nav,
   NavList,
   NavItem,
 } from "@patternfly/react-core";
+import BarsIcon from "@patternfly/react-icons/dist/esm/icons/bars-icon";
+import GithubIcon from "@patternfly/react-icons/dist/esm/icons/github-icon";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,6 +38,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const masthead = (
     <Masthead style={{ backgroundColor: "#1a1a1a", borderBottom: "1px solid #2d2d2d" }}>
+      <MastheadToggle>
+        <PageToggleButton variant="plain" aria-label="Navigation" id="nav-toggle">
+          <BarsIcon color="white" />
+        </PageToggleButton>
+      </MastheadToggle>
       <MastheadMain>
         <MastheadBrand>
           <Link
@@ -68,6 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </MastheadBrand>
       </MastheadMain>
+      <MastheadContent>
+        <a href="https://github.com/redhat-performance/configiq" target="_blank" rel="noopener" aria-label="GitHub repository" style={{ color: 'rgba(255,255,255,0.7)', display: 'flex', padding: 8, marginLeft: 'auto' }}>
+          <GithubIcon style={{ width: 21, height: 21 }} />
+        </a>
+      </MastheadContent>
     </Masthead>
   );
 
@@ -147,8 +162,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NavItemWithIcon
               icon={SlidersHIcon}
               label="Recommend sizing"
-              href="/calculator"
-              isActive={pathname === "/calculator"}
+              href="/recommend"
+              isActive={pathname === "/recommend"}
             />
             <NavItemWithIcon
               icon={CalculatorIcon}
@@ -157,16 +172,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               isActive={pathname === "/kv-cache"}
             />
             <NavItemWithIcon
+              icon={BoltIcon}
+              label="Performance"
+              href="/performance"
+              isActive={pathname === "/performance"}
+            />
+            <NavItemWithIcon
               icon={CubesIcon}
               label="GPU explorer"
               href="/gpu-explorer"
               isActive={pathname === "/gpu-explorer"}
-            />
-            <NavItemWithIcon
-              icon={BoltIcon}
-              label="Performance"
-              href="/performance-estimate"
-              isActive={pathname === "/performance-estimate"}
             />
             {false && <NavItemWithIcon
               icon={ListIcon}
@@ -181,6 +196,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               isActive={false}
             />}
 
+            {false && <>
             <div style={groupLabelStyle}>COSTINGS</div>
 
             <NavItemWithIcon
@@ -201,6 +217,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/routing"
               isActive={pathname === "/routing"}
             />
+            </>}
 
             <div style={groupLabelStyle}>SYSTEM</div>
 
@@ -240,6 +257,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       header={masthead}
       sidebar={sidebar}
       isManagedSidebar
+      defaultManagedSidebarIsOpen={true}
       style={{ backgroundColor: "#f5f5f5" }}
     >
       {children}

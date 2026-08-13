@@ -4,10 +4,12 @@ import * as React from 'react'
 import { Alert, Label, Spinner } from '@patternfly/react-core'
 import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
 import { formatBytes } from '@/lib/utils/format'
-import { useCountUp } from '@/app/performance-estimate/quickEstimateHelpers'
+import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext'
 import { getAppConfig } from '@/lib/app-config'
+import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput'
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput'
 import type { KvCacheCalcResult } from '@/lib/api/kv-cache-calc'
 import styles from './KvCacheCalc.module.css'
 
@@ -61,7 +63,59 @@ export default function KvCacheCalc() {
   const [debugStatus, setDebugStatus] = React.useState<number | null>(null)
   const [debugDuration, setDebugDuration] = React.useState<number | null>(null)
 
+  const [maxNumTokensInput, setMaxNumTokensInput] = React.useState('8192')
+  const [maxBatchSizeInput, setMaxBatchSizeInput] = React.useState('128')
+  const [tpSizeInput, setTpSizeInput] = React.useState('1')
+  const [ppSizeInput, setPpSizeInput] = React.useState('1')
+  const [memFractionValueInput, setMemFractionValueInput] = React.useState('1.0')
+
+  const invalidMaxNumTokens = maxNumTokensInput === '' || parseInt(maxNumTokensInput, 10) < 1;
+  const invalidMaxBatchSize = maxBatchSizeInput === '' || parseInt(maxBatchSizeInput, 10) < 1;
+  const invalidTpSize = tpSizeInput === '' || parseInt(tpSizeInput, 10) < 1;
+  const invalidPpSize = ppSizeInput === '' || parseInt(ppSizeInput, 10) < 1;
+  const invalidMemFractionValue = memFractionValueInput === '' || !Number.isFinite(Number(memFractionValueInput)) || Number(memFractionValueInput) < 0 || Number(memFractionValueInput) > 1;
+
+  const handleMaxNumTokensChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setMaxNumTokensInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setMaxNumTokens(n);
+  };
+  
+  const handleMaxBatchSizeChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setMaxBatchSizeInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setMaxBatchSize(n);
+  };
+
+  const handleTpSizeChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setTpSizeInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setTpSize(n);
+  };
+
+  const handlePpSizeChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setPpSizeInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setPpSize(n);
+  };
+
+  const handleMemFractionValueChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9.]/g, '');
+    setMemFractionValueInput(cleaned);
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && n >= 0 && n <= 1) setMemFractionValue(n);
+  };
+
   const catalogMatch = MODEL_OPTIONS.includes(model)
+  const kvModelStatus: ModelStatus = getAppConfig().supportedModels.includes(model)
+    ? 'supported'
+    : catalogMatch ? 'catalog'
+    : catalogLoading ? 'fetching'
+    : model ? 'idle' : 'idle'
 
   async function handleCalculate() {
     setLoading(true)
@@ -140,62 +194,25 @@ export default function KvCacheCalc() {
       <div className={styles.inputCard}>
         <div className={styles.inputRow}>
           <div className={styles.field}>
-            <label htmlFor="kv-model" className={styles.fieldLabel}>Model — Hugging Face ID</label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                id="kv-model"
-                list="kv-models"
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                placeholder="Type model name or select from dropdown..."
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="kv-models">
-                {MODEL_OPTIONS.map(m => <option key={m} value={m} />)}
-              </datalist>
-              {model && (
-                <span className={styles.modelChip}>
-                  {getAppConfig().supportedModels.includes(model) ? (
-                    <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                  ) : catalogMatch ? (
-                    <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                  ) : catalogLoading ? (
-                    <Label color="grey" isCompact>Loading...</Label>
-                  ) : (
-                    <Label color="grey" isCompact>Custom model</Label>
-                  )}
-                </span>
-              )}
-            </div>
+            <ModelInput
+              id="kv-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              status={kvModelStatus}
+            />
           </div>
 
-          <div className={styles.field}>
-            <label htmlFor="kv-gpu" className={styles.fieldLabel}>GPU system</label>
-            <select
-              id="kv-gpu"
-              value={system}
-              onChange={e => setSystem(e.target.value)}
-              className={styles.gpuSelect}
-            >
-              {aicGpus.length === 0
-                ? <option value={system} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}
-                    </option>
-                  ))
-              }
-            </select>
-          </div>
+          <GpuSystemInput id="kv-gpu" value={system} onChange={setSystem} gpuOptions={aicGpus} />
+        </div>
 
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
           <button
             type="button"
             className={styles.calcBtn}
-            onClick={handleCalculate}
-            disabled={loading || !model.trim()}
+            onClick={handleCalculate} 
+            disabled={loading || !model.trim() || invalidMaxNumTokens || invalidMaxBatchSize || invalidTpSize || invalidPpSize || invalidMemFractionValue}
           >
             {loading ? 'Calculating…' : 'Calculate'}
           </button>
@@ -249,10 +266,10 @@ export default function KvCacheCalc() {
                 <input
                   type="number"
                   id="kv-tokens"
-                  value={maxNumTokens}
-                  onChange={e => setMaxNumTokens(parseInt(e.target.value, 10) || 0)}
+                  value={maxNumTokensInput}
+                  onChange={e => handleMaxNumTokensChange(e.target.value)}
                   min={1}
-                  className={styles.numberInput}
+                  className={invalidMaxNumTokens ? styles.paramInputInvalid : styles.numberInput}
                 />
               </div>
               <div className={styles.field}>
@@ -260,10 +277,10 @@ export default function KvCacheCalc() {
                 <input
                   type="number"
                   id="kv-batch"
-                  value={maxBatchSize}
-                  onChange={e => setMaxBatchSize(parseInt(e.target.value, 10) || 0)}
+                  value={maxBatchSizeInput}
+                  onChange={e => handleMaxBatchSizeChange(e.target.value)}
                   min={1}
-                  className={styles.numberInput}
+                  className={invalidMaxBatchSize ? styles.paramInputInvalid : styles.numberInput}
                 />
               </div>
             </div>
@@ -276,10 +293,10 @@ export default function KvCacheCalc() {
                 <input
                   type="number"
                   id="kv-tp"
-                  value={tpSize}
-                  onChange={e => setTpSize(parseInt(e.target.value, 10) || 1)}
+                  value={tpSizeInput}
+                  onChange={e => handleTpSizeChange(e.target.value)}
                   min={1}
-                  className={styles.numberInput}
+                  className={invalidTpSize ? styles.paramInputInvalid : styles.numberInput}
                 />
               </div>
               <div className={styles.field}>
@@ -287,10 +304,10 @@ export default function KvCacheCalc() {
                 <input
                   type="number"
                   id="kv-pp"
-                  value={ppSize}
-                  onChange={e => setPpSize(parseInt(e.target.value, 10) || 1)}
+                  value={ppSizeInput}
+                  onChange={e => handlePpSizeChange(e.target.value)}
                   min={1}
-                  className={styles.numberInput}
+                  className={invalidPpSize ? styles.paramInputInvalid : styles.numberInput}
                 />
               </div>
               <div className={styles.field}>
@@ -325,12 +342,12 @@ export default function KvCacheCalc() {
                 <input
                   type="number"
                   id="kv-mem-val"
-                  value={memFractionValue}
-                  onChange={e => setMemFractionValue(parseFloat(e.target.value) || 0)}
+                  value={memFractionValueInput}
+                  onChange={e => handleMemFractionValueChange(e.target.value)}
                   min={0}
                   max={1}
                   step={0.05}
-                  className={styles.numberInput}
+                  className={invalidMemFractionValue ? styles.paramInputInvalid : styles.numberInput}
                 />
               </div>
               <div className={styles.field}>
@@ -357,7 +374,7 @@ export default function KvCacheCalc() {
             <p>{error}</p>
             <p style={{ marginTop: 8 }}>
               You can also try using our{' '}
-              <a href="/performance-estimate" className={styles.errorLink}>
+              <a href="/performance" className={styles.errorLink}>
                 Performance estimate
               </a>{' '}
               for an approximate KV cache calculation.

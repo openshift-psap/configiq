@@ -5,7 +5,7 @@
    ============================================================================ */
 
 .page {
-  font-family: var(--gc-font-sans);
+  font-family: var(--sans);
   color: var(--gc-text);
   font-size: 15px;
   line-height: 1.5;
@@ -18,7 +18,7 @@
 /* ── Page header ── */
 .header    { margin-bottom: 28px; }
 .pageTitle {
-  font-family: var(--gc-font-display);
+  font-family: var(--display);
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -47,7 +47,7 @@
 }
 
 .sectionTitle {
-  font-family: var(--gc-font-sans);
+  font-family: var(--sans);
   font-size: 15px;
   font-weight: 600;
   color: var(--gc-text);
@@ -65,7 +65,7 @@
 .fieldWrap { display: flex; flex-direction: column; gap: 6px; }
 
 .fieldLabel {
-  font-family: var(--gc-font-mono);
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -86,7 +86,7 @@
   border-radius: 4px;
   padding: 7px 130px 7px 12px;
   font-size: 14px;
-  font-family: var(--gc-font-sans);
+  font-family: var(--sans);
   background: white;
   color: var(--gc-text);
   box-sizing: border-box;
@@ -116,7 +116,7 @@
   border-radius: 4px;
   padding: 7px 12px;
   font-size: 14px;
-  font-family: var(--gc-font-sans);
+  font-family: var(--sans);
   background: white;
   color: var(--gc-text);
   box-sizing: border-box;
@@ -161,7 +161,7 @@
   border-radius: 4px;
   padding: 7px 12px;
   font-size: 14px;
-  font-family: var(--gc-font-sans);
+  font-family: var(--sans);
   background: white;
   color: var(--gc-text);
   cursor: pointer;

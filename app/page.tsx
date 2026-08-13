@@ -26,7 +26,7 @@ const tools = [
     title: "Recommend sizing",
     description:
       "Find the optimal GPU configuration for a workload target using the AIConfigurator engine.",
-    href: "/calculator",
+    href: "/recommend",
     icon: <SlidersHIcon />,
   },
   {
@@ -47,33 +47,31 @@ const tools = [
     title: "Performance",
     description:
       "Estimate TTFT, TPOT, and throughput for your model and parallelism configuration.",
-    href: "/performance-estimate",
+    href: "/performance",
     icon: <BoltIcon />,
   },
-  {
-    title: "Hybrid Savings",
-    description:
-      "Model cost savings between cloud, on-premise, and hybrid GPU deployment strategies.",
-    href: "/hybrid-savings",
-    icon: <MigrationIcon />,
-  },
-  {
-    title: "Routing economics",
-    description:
-      "Analyze request routing between model tiers to optimize cost vs quality tradeoffs.",
-    href: "/routing",
-    icon: <RouteIcon />,
-  },
+  // Hidden pending aicostings API
+  // {
+  //   title: "Hybrid Savings",
+  //   description:
+  //     "Model cost savings between cloud, on-premise, and hybrid GPU deployment strategies.",
+  //   href: "/hybrid-savings",
+  //   icon: <MigrationIcon />,
+  // },
+  // {
+  //   title: "Routing economics",
+  //   description:
+  //     "Analyze request routing between model tiers to optimize cost vs quality tradeoffs.",
+  //   href: "/routing",
+  //   icon: <RouteIcon />,
+  // },
 ];
 
 export default function HomePage() {
   return (
     <>
       <PageSection variant="light">
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 0, right: 0, fontSize: '0.875rem', color: '#6A6E73' }}>
-            Work in progress
-          </div>
+        <div>
           <TextContent>
             <Title headingLevel="h1" size="2xl">
               ConfigIQ

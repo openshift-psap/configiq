@@ -5,6 +5,7 @@ import { Button, Label } from '@patternfly/react-core';
 import { EyeIcon, EyeSlashIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
+import { ModelInput } from '@/components/ui/ModelInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import styles from './Settings.module.css';
@@ -27,6 +28,7 @@ export function Settings() {
   const [modelSaved, setModelSaved] = React.useState(false);
   const [tokenSaved, setTokenSaved] = React.useState(false);
   const [backendSaved, setBackendSaved] = React.useState(false);
+  const [validatedOpen, setValidatedOpen] = React.useState(false);
 
   // Sync local model input once context has loaded from localStorage
   const modelSynced = React.useRef(false);
@@ -110,46 +112,69 @@ export function Settings() {
             )}
           </div>
           <div className={styles.fieldWrap}>
-            <label className={styles.fieldLabel} htmlFor="settings-model">
-              Hugging Face model ID
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                id="settings-model"
-                type="text"
-                list="settings-model-options"
-                value={localModel}
-                onChange={e => setLocalModel(e.target.value)}
-                placeholder={catalogLoading ? 'Loading catalog…' : 'e.g. Qwen/Qwen3-32B'}
-                className={styles.modelInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="settings-model-options">
-                {modelOptions.map(m => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {modelStatus === 'supported' && (
-                  <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                )}
-                {modelStatus === 'catalog' && (
-                  <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                )}
-                {modelStatus === 'fetching' && (
-                  <Label color="grey" isCompact>Checking…</Label>
-                )}
-                {modelStatus === 'fetched' && (
-                  <Label color="gold" isCompact icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                )}
-                {modelStatus === 'error' && (
-                  <Label color="red" isCompact icon={<ExclamationTriangleIcon />}>Not found</Label>
-                )}
+            <ModelInput
+              id="settings-model"
+              model={localModel}
+              onChange={setLocalModel}
+              modelOptions={modelOptions}
+              isLoading={catalogLoading}
+              status={modelStatus}
+              placeholder={catalogLoading ? 'Loading catalog…' : 'e.g. Qwen/Qwen3-32B'}
+              helperText="All tools use this model by default. Type to autocomplete from the AIC catalog."
+            />
+          </div>
+        </div>
+
+        {/* ── Validated models ── */}
+        <div className={styles.section}>
+          <div
+            className={styles.sectionHead}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setValidatedOpen(o => !o)}
+          >
+            <div>
+              <div className={styles.sectionTitle}>
+                Validated models
+                <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '8px', color: '#6a6e73' }}>
+                  {validatedOpen ? '▲' : '▼'}
+                </span>
+              </div>
+              <div className={styles.sectionDesc}>
+                Models validated for use with the AIConfigurator sizing engine.
               </div>
             </div>
-            <div className={styles.helperText}>
-              All tools use this model by default. Type to autocomplete from the AIC catalog.
-            </div>
+            <Label color="blue" isCompact>{getAppConfig().supportedModels.length} models</Label>
           </div>
+          {validatedOpen && (
+            <div className={styles.fieldWrap}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 8px' }}>
+                {getAppConfig().supportedModels.map(m => (
+                  <Label
+                    key={m}
+                    color="blue"
+                    isCompact
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                      setLocalModel(m);
+                      setDefaultModel(m);
+                      setModelSaved(true);
+                      setTimeout(() => setModelSaved(false), 2000);
+                    }}
+                  >
+                    {m.split('/').pop()}
+                  </Label>
+                ))}
+              </div>
+              {getAppConfig().modelRequestUrl && (
+                <div style={{ marginTop: '12px', fontSize: '13px' }}>
+                  Don&apos;t see your model?{' '}
+                  <a href={getAppConfig().modelRequestUrl} target="_blank" rel="noopener" style={{ color: '#0066cc' }}>
+                    Request validation →
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── HF token ── */}

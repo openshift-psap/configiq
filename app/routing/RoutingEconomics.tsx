@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { Switch, FormSelect, FormSelectOption } from '@patternfly/react-core'
-import { useCountUp } from '@/app/performance-estimate/quickEstimateHelpers'
+import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
 import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
 import { DEFAULT_TIERS } from '@/lib/routing/tier-defaults'

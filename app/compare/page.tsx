@@ -235,7 +235,7 @@ export default function ComparePage() {
           <Text style={{ marginBottom: '32px', color: '#6a6e73', fontSize: '15px' }}>
             Run a Performance estimate and click &ldquo;Save estimate&rdquo; to compare configurations here.
           </Text>
-          <Link href="/performance-estimate">
+          <Link href="/performance">
             <Button variant="primary" size="lg">
               → Go to Performance estimate
             </Button>
@@ -262,7 +262,7 @@ export default function ComparePage() {
             <Button variant="secondary" size="sm">Export to Sheets</Button>
             <Button variant="danger" size="sm" onClick={handleClearAll}>Clear all</Button>
           </div>
-          <Link href="/performance-estimate">
+          <Link href="/performance">
             <Button variant="primary">+ Add estimate</Button>
           </Link>
         </div>

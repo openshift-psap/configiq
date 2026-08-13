@@ -18,6 +18,8 @@ import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
+import { ModelInput } from '@/components/ui/ModelInput';
+import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 
 function modelSuggestions(): string {
   const names = getAppConfig().suggestedModelNames;
@@ -162,6 +164,35 @@ export default function AdvancedEstimate() {
   // Live pricing
   const [livePricing, setLivePricing] = React.useState<Record<string, number>>({});
 
+  const [islInput, setIslInput] = React.useState('2048');
+  const [oslInput, setOslInput] = React.useState('128');
+  const [ttftInput, setTtftInput] = React.useState('1000');
+
+  const invalidISL = islInput === '' || parseInt(islInput, 10) < 1;
+  const invalidOSL = oslInput === '' || parseInt(oslInput, 10) < 1;
+  const invalidTTFT = ttftInput === '' || !Number.isFinite(Number(ttftInput)) || Number(ttftInput) <= 0;
+
+  const handleIslChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setIslInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setIsl(n);
+  };
+
+  const handleOslChange = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    setOslInput(digits);
+    const n = parseInt(digits, 10);
+    if (!isNaN(n) && n >= 1) setOsl(n);
+  };
+
+  const handleTtftChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9.]/g, '');
+    setTtftInput(cleaned);
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && n > 0) setTtft(n);
+  };
+
 
   // Model status check + fetch HF config
   React.useEffect(() => {
@@ -236,79 +267,19 @@ export default function AdvancedEstimate() {
         {/* Model + GPU row */}
         <div className={styles.inputGrid}>
           <div>
-            <label className={styles.fieldLabel}>
-              Model — Hugging Face ID
-              <StatusChip status={modelStatus} />
-            </label>
-            <div className={styles.modelInputWrapper}>
-              <input
-                type="text"
-                className={styles.modelInput}
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                list="model-options"
-                placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <datalist id="model-options">
-                {MODEL_OPTIONS.map(m => <option key={m} value={m} />)}
-              </datalist>
-              <div className={styles.autoChipWrapper}>
-                {modelStatus === 'supported' && (
-                  <Label color="blue" isCompact icon={<CheckCircleIcon />}>Supported</Label>
-                )}
-                {modelStatus === 'catalog' && (
-                  <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>
-                )}
-                {modelStatus === 'fetching' && (
-                  <Label color="grey" isCompact>Checking...</Label>
-                )}
-                {modelStatus === 'fetched' && (
-                  <Label color="gold" isCompact icon={<CheckCircleIcon />}>From HuggingFace</Label>
-                )}
-                {modelStatus === 'error' && (
-                  <Label color="red" isCompact icon={<ExclamationTriangleIcon />}>Not found</Label>
-                )}
-              </div>
-            </div>
-            <div className={styles.helperText}>
-              Supported: {modelSuggestions()} — type to autocomplete
-              {hfToken ? (
-                <span style={{ marginLeft: '8px', color: '#0066cc', fontWeight: 500 }}>🔑 HF token active</span>
-              ) : (
-                <span style={{ marginLeft: '8px' }}>
-                  Gated model?{' '}
-                  <a href="/settings" style={{ color: '#0066cc' }}>Add your HF token in Settings →</a>
-                </span>
-              )}
-            </div>
+            <ModelInput
+              id="adv-model"
+              model={model}
+              onChange={setModel}
+              modelOptions={aicModels}
+              isLoading={catalogLoading}
+              hfToken={hfToken}
+              status={modelStatus}
+              placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
+            />
           </div>
 
-          <div>
-            <label className={styles.fieldLabel}>GPU system</label>
-            <select
-              className={styles.gpuSelect}
-              value={gpuSystem}
-              onChange={e => setGpuSystem(e.target.value)}
-            >
-              {aicGpus.length === 0
-                ? <option value={gpuSystem} disabled>Loading GPU catalog…</option>
-                : aicGpus.map(g => (
-                    <option key={g.systemId} value={g.systemId}>
-                      {g.label}{g.vramGb ? ` — ${g.vramGb} GB` : ''}
-                    </option>
-                  ))
-              }
-            </select>
-            {currentGpuOption && (
-              <div className={styles.helperText}>
-                {currentGpuOption.vramGb != null && <>{currentGpuOption.vramGb} GB</>}
-                {currentGpuOption.bandwidthTbps != null && <> · {currentGpuOption.bandwidthTbps} TB/s</>}
-                {currentGpuOption.tflopsBf16 != null && <> · {currentGpuOption.tflopsBf16.toFixed(0)} TFLOPS</>}
-              </div>
-            )}
-          </div>
+          <GpuSystemInput id="adv-gpu" value={gpuSystem} onChange={setGpuSystem} gpuOptions={aicGpus} />
         </div>
 
         {/* Calculate button */}
@@ -316,7 +287,7 @@ export default function AdvancedEstimate() {
           <button
             className={styles.calcBtn}
             onClick={handleCalculate}
-            disabled={isLoading || !model.includes('/')}
+            disabled={isLoading || !model.includes('/') || invalidISL || invalidOSL || invalidTTFT}
           >
             {isLoading ? 'Calculating...' : 'Calculate'}
           </button>
@@ -324,7 +295,7 @@ export default function AdvancedEstimate() {
       </div>
 
       <InfoStrip>
-        Based on your configuration — ISL {isl.toLocaleString()}, OSL {osl}, TTFT target {(ttft / 1000).toFixed(1)}s.
+        Based on your configuration — ISL {isl.toLocaleString()}, OSL {osl}, TTFT target {(ttft / 1000).toFixed(3)}s.
         {' '}<InfoStripAction onClick={() => setExpanded(expanded.includes('customize') ? expanded.filter(e => e !== 'customize') : [...expanded, 'customize'])}>
           Adjust? (edit fields below)
         </InfoStripAction>
@@ -339,9 +310,9 @@ export default function AdvancedEstimate() {
                 <label className={styles.fieldLabel}>Avg input tokens (ISL)</label>
                 <input
                   type="number"
-                  className={styles.paramInput}
-                  value={isl}
-                  onChange={e => setIsl(Math.max(1, parseInt(e.target.value) || 1))}
+                  className={invalidISL ? styles.paramInputInvalid : styles.paramInput}
+                  value={islInput}
+                  onChange={e => handleIslChange(e.target.value)}
                   min={1}
                 />
               </div>
@@ -349,22 +320,19 @@ export default function AdvancedEstimate() {
                 <label className={styles.fieldLabel}>Avg output tokens (OSL)</label>
                 <input
                   type="number"
-                  className={styles.paramInput}
-                  value={osl}
-                  onChange={e => setOsl(Math.max(1, parseInt(e.target.value) || 1))}
+                  className={invalidOSL ? styles.paramInputInvalid : styles.paramInput}
+                  value={oslInput}
+                  onChange={e => handleOslChange(e.target.value)}
                   min={1}
                 />
               </div>
               <div>
-                <label className={styles.fieldLabel}>Max TTFT (seconds)</label>
+                <label className={styles.fieldLabel}>Max TTFT (ms)</label>
                 <input
                   type="number"
-                  className={styles.paramInput}
-                  value={ttft / 1000}
-                  onChange={e => {
-                    const sec = parseFloat(e.target.value);
-                    if (!isNaN(sec) && sec > 0) setTtft(Math.round(sec * 1000));
-                  }}
+                  className={invalidTTFT ? styles.paramInputInvalid : styles.paramInput}
+                  value={ttftInput}
+                  onChange={e => handleTtftChange(e.target.value)}
                   min={0.1}
                   step={0.1}
                 />
