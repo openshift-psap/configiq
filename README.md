@@ -68,9 +68,10 @@ app/                  Next.js App Router pages
   routing/            Routing Economics
   api/                Next.js API routes (proxy to AIConfigurator)
     recommend/        POST — GPU sizing via AIC /recommend
+    estimate/         POST — GPU performance via AIC /estimate
     memory/           POST — memory breakdown via AIC /memory
-    gpus/             GET — GPU catalog
-    models/           GET — model catalog
+    models/           GET — model catalog via AIC /models
+    gpus/             GET — GPU catalog via AIC /system
 components/
   layout/
     AppShell.tsx      Top-nav masthead + sidebar navigation
