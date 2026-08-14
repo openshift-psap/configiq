@@ -70,33 +70,6 @@ export function ProductTour({ steps, tourId, onComplete }: ProductTourProps) {
         height: spotlightHeight
       });
 
-      // Sanity check: log all measurements
-      const targetCenterX = rect.left + rect.width / 2;
-      const targetCenterY = rect.top + rect.height / 2;
-      const spotlightCenterX = spotlightLeft + spotlightWidth / 2;
-      const spotlightCenterY = spotlightTop + spotlightHeight / 2;
-
-      console.log(`\n=== Step ${currentStep + 1}: "${step.title}" ===`);
-      console.log(`Target selector: ${step.target}`);
-      console.log(`Element found:`, targetEl);
-      console.log(`Target rect:`, {
-        top: rect.top.toFixed(1),
-        left: rect.left.toFixed(1),
-        width: rect.width.toFixed(1),
-        height: rect.height.toFixed(1),
-        bottom: rect.bottom.toFixed(1),
-        right: rect.right.toFixed(1)
-      });
-      console.log(`Spotlight rect:`, {
-        top: spotlightTop.toFixed(1),
-        left: spotlightLeft.toFixed(1),
-        width: spotlightWidth.toFixed(1),
-        height: spotlightHeight.toFixed(1)
-      });
-      console.log(`Target center: (${targetCenterX.toFixed(1)}, ${targetCenterY.toFixed(1)})`);
-      console.log(`Spotlight center: (${spotlightCenterX.toFixed(1)}, ${spotlightCenterY.toFixed(1)})`);
-      console.log(`Offset: ${(spotlightCenterY - targetCenterY).toFixed(1)}px vertical, ${(spotlightCenterX - targetCenterX).toFixed(1)}px horizontal`);
-
       // Position tooltip based on step.position (FIXED positioning, no scroll offset)
       let top = 0;
       let left = 0;
@@ -184,20 +157,6 @@ export function ProductTour({ steps, tourId, onComplete }: ProductTourProps) {
     <>
       {/* Invisible click target to skip tour */}
       <div className={styles.overlay} onClick={handleSkip} />
-
-      {/* DEBUG: Red outline showing exact target position */}
-      <div
-        style={{
-          position: 'fixed',
-          top: `${spotlightRect.top + 8}px`,
-          left: `${spotlightRect.left + 8}px`,
-          width: `${spotlightRect.width - 16}px`,
-          height: `${spotlightRect.height - 16}px`,
-          border: '2px solid red',
-          pointerEvents: 'none',
-          zIndex: 10001,
-        }}
-      />
 
       {/* Spotlight on target element */}
       <div

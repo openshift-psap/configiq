@@ -8,7 +8,7 @@ import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext'
 import { getAppConfig } from '@/lib/app-config'
-import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput'
+import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox'
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput'
 import type { KvCacheCalcResult } from '@/lib/api/kv-cache-calc'
 import styles from './KvCacheCalc.module.css'
@@ -23,9 +23,15 @@ const BREAKDOWN_COLORS: Record<string, string> = {
 }
 
 export default function KvCacheCalc() {
-  const { hydrated, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion: settingsBackendVersion } = useSettings()
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion: settingsBackendVersion } = useSettings()
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog()
   const MODEL_OPTIONS = aicModels
+
+  const modelItems: ComboBoxItem[] = React.useMemo(() =>
+    aicModels.map(m => {
+      const slash = m.indexOf('/');
+      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+    }), [aicModels]);
 
   const [model, setModel] = React.useState('')
   const [system, setSystem] = React.useState(() => getAppConfig().defaultSystem)
@@ -111,11 +117,6 @@ export default function KvCacheCalc() {
   };
 
   const catalogMatch = MODEL_OPTIONS.includes(model)
-  const kvModelStatus: ModelStatus = getAppConfig().supportedModels.includes(model)
-    ? 'supported'
-    : catalogMatch ? 'catalog'
-    : catalogLoading ? 'fetching'
-    : model ? 'idle' : 'idle'
 
   async function handleCalculate() {
     setLoading(true)
@@ -194,13 +195,15 @@ export default function KvCacheCalc() {
       <div className={styles.inputCard}>
         <div className={styles.inputRow}>
           <div className={styles.field}>
-            <ModelInput
+            <ComboBox
               id="kv-model"
-              model={model}
+              value={model}
               onChange={setModel}
-              modelOptions={aicModels}
-              isLoading={catalogLoading}
-              status={kvModelStatus}
+              items={modelItems}
+              placeholder="Type model name or select from dropdown..."
+              allowCustom
+              supportedModels={getAppConfig().supportedModels}
+              hfToken={hfToken}
             />
           </div>
 

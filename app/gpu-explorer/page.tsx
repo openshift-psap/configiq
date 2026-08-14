@@ -131,7 +131,7 @@ export default function GpuExplorerPage() {
         <Card>
           <CardBody>
             <Flex direction={{ default: 'column' }} spaceItems={{ default: 'spaceItemsMd' }}>
-              {/* Presets */}
+              {/* Presets — hidden until all presets are functional
               <FlexItem>
                 <Text component="p" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6a6e73', marginBottom: '8px', display: 'block', fontSize: '14px' }}>
                   Preset:
@@ -142,8 +142,9 @@ export default function GpuExplorerPage() {
                   <ToggleGroupItem text="Performance" isSelected={preset === 'performance'} onChange={() => setPreset('performance')} />
                 </ToggleGroup>
               </FlexItem>
+              */}
 
-              {/* Vendor Filter */}
+              {/* Vendor Filter — hidden until needed
               <FlexItem>
                 <Flex spaceItems={{ default: 'spaceItemsLg' }}>
                   <FlexItem>
@@ -171,6 +172,7 @@ export default function GpuExplorerPage() {
                   </FlexItem>
                 </Flex>
               </FlexItem>
+              */}
 
               {/* Axis Selectors */}
               <FlexItem>
@@ -181,7 +183,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={xAxis === 'vram'} onChange={() => setXAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} isDisabled />
+                      {/* <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} isDisabled /> */}
                       <ToggleGroupItem text="Throughput Index" isSelected={xAxis === 'throughput-index'} onChange={() => setXAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={xAxis === 'mem-bw'} onChange={() => setXAxis('mem-bw')} />
                     </ToggleGroup>
@@ -193,7 +195,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={yAxis === 'vram'} onChange={() => setYAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} isDisabled />
+                      {/* <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} isDisabled /> */}
                       <ToggleGroupItem text="Throughput Index" isSelected={yAxis === 'throughput-index'} onChange={() => setYAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={yAxis === 'mem-bw'} onChange={() => setYAxis('mem-bw')} />
                     </ToggleGroup>
@@ -204,11 +206,11 @@ export default function GpuExplorerPage() {
               {/* Chart */}
               <FlexItem style={{ marginTop: '24px' }}>
                 {!mounted || isLoading ? (
-                  <div style={{ padding: '60px', textAlign: 'center', background: '#f5f5f5', borderRadius: '8px' }}>
+                  <div style={{ padding: '120px', textAlign: 'center', background: '#f5f5f5', borderRadius: '8px' }}>
                     <Text component="p" style={{ color: '#6a6e73' }}>Loading GPU catalog…</Text>
                   </div>
                 ) : allData.length === 0 ? (
-                  <div style={{ padding: '60px', textAlign: 'center', background: '#f5f5f5', borderRadius: '8px' }}>
+                  <div style={{ padding: '120px', textAlign: 'center', background: '#f5f5f5', borderRadius: '8px' }}>
                     <Text component="h3" style={{ color: '#6a6e73', marginBottom: '8px' }}>No data available</Text>
                     <Text component="p" style={{ color: '#6a6e73', fontSize: '14px' }}>Try selecting a different vendor filter</Text>
                   </div>

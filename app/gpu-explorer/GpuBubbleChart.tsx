@@ -50,18 +50,18 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
   const sizeValues = data.map(d => d.size);
 
   const xMin = 0;
-  const xMax = Math.max(...xValues) * 1.1;
+  const xMax = Math.max(...xValues) * 1.1 || 1;
   const yMin = 0;
-  const yMax = Math.max(...yValues) * 1.1;
+  const yMax = Math.max(...yValues) * 1.1 || 1;
   const sizeMin = Math.min(...sizeValues);
   const sizeMax = Math.max(...sizeValues);
+  const sizeRange = sizeMax - sizeMin || 1;
 
   // Scale functions
   const scaleX = (val: number) => (val / xMax) * chartWidth;
   const scaleY = (val: number) => chartHeight - (val / yMax) * chartHeight;
   const scaleSize = (val: number) => {
-    // Map size values to radius 5-30px
-    const normalized = (val - sizeMin) / (sizeMax - sizeMin);
+    const normalized = (val - sizeMin) / sizeRange;
     return 5 + normalized * 25;
   };
 
@@ -154,7 +154,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
             x={padding.left + scaleX(tick)}
             y={padding.top + chartHeight + 20}
             textAnchor="middle"
-            fontSize={12}
+            fontSize={13}
             fill="#3c3f42"
             fontFamily="var(--font-sans, sans-serif)"
           >
@@ -166,7 +166,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
         x={padding.left + chartWidth / 2}
         y={height - 10}
         textAnchor="middle"
-        fontSize={13}
+        fontSize={16}
         fontWeight={500}
         fill="#151515"
         fontFamily="var(--font-sans, sans-serif)"
@@ -198,7 +198,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
             y={padding.top + scaleY(tick)}
             textAnchor="end"
             dominantBaseline="middle"
-            fontSize={12}
+            fontSize={13}
             fill="#3c3f42"
             fontFamily="var(--font-sans, sans-serif)"
           >
@@ -210,7 +210,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
         x={15}
         y={padding.top + chartHeight / 2}
         textAnchor="middle"
-        fontSize={13}
+        fontSize={16}
         fontWeight={500}
         fill="#151515"
         fontFamily="var(--font-sans, sans-serif)"
@@ -262,7 +262,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
       {/* Tooltip - follows mouse cursor */}
       {hoveredIndex !== null && (() => {
         const tooltipWidth = 260;
-        const tooltipHeight = 180;
+        const tooltipHeight = 160;
         const tooltipX = mousePos.x + 15 > width - tooltipWidth ? mousePos.x - tooltipWidth - 15 : mousePos.x + 15;
         const tooltipY = mousePos.y - 90 < 0 ? mousePos.y + 20 : mousePos.y - 90;
 
@@ -278,7 +278,7 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
                 background: 'rgba(255, 255, 255, 0.98)',
                 border: '2px solid #151515',
                 borderRadius: '8px',
-                padding: '14px 16px',
+                padding: '14px 16px 0px 16px',
                 fontSize: '13px',
                 lineHeight: '1.7',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
@@ -293,10 +293,10 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
                 <div style={{ color: '#3c3f42', fontSize: '12px' }}>
                   <div style={{ marginBottom: '3px' }}><strong>VRAM:</strong> {data[hoveredIndex].vram} GB</div>
                   <div style={{ marginBottom: '3px' }}><strong>Memory BW:</strong> {data[hoveredIndex].memBW?.toFixed(1)} GB/s</div>
-                  <div style={{ marginBottom: '3px' }}><strong>Hardware Cost:</strong> ${data[hoveredIndex].hwCost?.toLocaleString()}</div>
+                  {/* <div style={{ marginBottom: '3px' }}><strong>Hardware Cost:</strong> ${data[hoveredIndex].hwCost?.toLocaleString()}</div> */}
                   <div style={{ marginBottom: '3px' }}><strong>Architecture:</strong> {data[hoveredIndex].architecture}</div>
                   <div style={{ marginBottom: '3px' }}><strong>TFLOPS (BF16):</strong> {data[hoveredIndex].tflops}</div>
-                  <div><strong>Tokens/$:</strong> {data[hoveredIndex].tokensPerDollar?.toLocaleString()}</div>
+                  {/* <div><strong>Tokens/$:</strong> {data[hoveredIndex].tokensPerDollar?.toLocaleString()}</div> */}
                 </div>
               </div>
             </foreignObject>

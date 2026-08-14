@@ -13,12 +13,11 @@ import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 
 import styles from './AdvancedEstimate.module.css';
-import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
-import { ModelInput } from '@/components/ui/ModelInput';
+import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 
 function modelSuggestions(): string {
@@ -136,6 +135,12 @@ export default function AdvancedEstimate() {
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
 
+  const modelItems: ComboBoxItem[] = React.useMemo(() =>
+    aicModels.map(m => {
+      const slash = m.indexOf('/');
+      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+    }), [aicModels]);
+
   // Input state
   const [model, setModel] = React.useState('');
 
@@ -150,9 +155,6 @@ export default function AdvancedEstimate() {
   const [isl, setIsl] = React.useState(2048);
   const [osl, setOsl] = React.useState(128);
   const [ttft, setTtft] = React.useState(1000);
-
-  // Model status + HF config
-  const [modelStatus, setModelStatus] = React.useState<'idle' | 'supported' | 'catalog' | 'fetching' | 'fetched' | 'error'>('idle');
 
   // GPU sizer (persistent across navigation)
   const { isLoading, result, error, errorCode, elapsed, debugRequest, debugResponse, debugStatus, debugDuration, startSizing } = useGpuSizer();
@@ -193,22 +195,6 @@ export default function AdvancedEstimate() {
     if (Number.isFinite(n) && n > 0) setTtft(n);
   };
 
-
-  // Model status check + fetch HF config
-  React.useEffect(() => {
-    if (catalogLoading) { setModelStatus('idle'); return; }
-    const timer = setTimeout(() => {
-      if (!model.includes('/')) { setModelStatus('idle'); return; }
-      if (getAppConfig().supportedModels.includes(model)) { setModelStatus('supported'); return; }
-      const inCatalog = MODEL_OPTIONS.includes(model);
-      if (inCatalog) { setModelStatus('catalog'); return; }
-      setModelStatus('fetching');
-      fetchModelConfig(model, hfToken).then(r => {
-        setModelStatus(r.success && r.config ? 'fetched' : 'error');
-      });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [model, hfToken, MODEL_OPTIONS, catalogLoading, hydrated]);
 
   // Fetch live pricing
   React.useEffect(() => {
@@ -267,15 +253,15 @@ export default function AdvancedEstimate() {
         {/* Model + GPU row */}
         <div className={styles.inputGrid}>
           <div>
-            <ModelInput
+            <ComboBox
               id="adv-model"
-              model={model}
+              value={model}
               onChange={setModel}
-              modelOptions={aicModels}
-              isLoading={catalogLoading}
-              hfToken={hfToken}
-              status={modelStatus}
+              items={modelItems}
               placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
+              allowCustom
+              supportedModels={getAppConfig().supportedModels}
+              hfToken={hfToken}
             />
           </div>
 

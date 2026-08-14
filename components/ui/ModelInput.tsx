@@ -66,7 +66,7 @@ export function ModelInput({
       <div className={styles.toggle}>
         <Switch
           id={`${id}-validated-only`}
-          label="Validated only"
+          label="Tested only"
           isChecked={supportedOnly}
           onChange={handleToggle}
           isReversed
@@ -80,7 +80,7 @@ export function ModelInput({
           list={datalistId}
           value={model}
           onChange={e => onChange(e.target.value)}
-          placeholder={supportedOnly ? 'Select a validated model...' : placeholder}
+          placeholder={supportedOnly ? 'Select a tested model...' : placeholder}
           className={styles.input}
           spellCheck={false}
           autoComplete="off"
@@ -89,7 +89,7 @@ export function ModelInput({
           {displayModels.map(m => <option key={m} value={m} />)}
         </datalist>
         <div className={styles.badge}>
-          {status === 'supported' && <Label color="blue" isCompact icon={<CheckCircleIcon />}>Validated</Label>}
+          {status === 'supported' && <Label color="blue" isCompact icon={<CheckCircleIcon />}>Tested</Label>}
           {status === 'catalog' && <Label color="green" isCompact icon={<CheckCircleIcon />}>In catalog</Label>}
           {status === 'fetching' && <Label color="grey" isCompact>Checking...</Label>}
           {status === 'fetched' && <Label color="gold" isCompact icon={<CheckCircleIcon />}>From HuggingFace</Label>}
@@ -100,12 +100,12 @@ export function ModelInput({
 
       <div className={styles.helperText}>
         {helperText ?? (supportedOnly ? (
-            <span>Validated: {suggestedNames()}, ... — type to autocomplete</span>
+            <span>Tested: {suggestedNames()}, ... — type to autocomplete</span>
           ) : (
             <>
-              <div>Validated: {suggestedNames()}, ... — type to autocomplete</div>
+              <div>Tested: {suggestedNames()}, ... — type to autocomplete</div>
               {model && !supportedModels.includes(model) && cfg.modelRequestUrl && (
-                <div>New model? <a href={cfg.modelRequestUrl + encodeURIComponent(model)} target="_blank" rel="noopener" className={styles.requestLink}>Request validation →</a></div>
+                <div>New model? <a href={cfg.modelRequestUrl + encodeURIComponent(model)} target="_blank" rel="noopener" className={styles.requestLink}>Request testing →</a></div>
               )}
               {hfToken ? (
                 <div style={{ color: '#0066cc', fontWeight: 500 }}>🔑 HF token active</div>

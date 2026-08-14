@@ -10,6 +10,10 @@
     "sglang": "0.5.17"
   },
   "suggestedModelNames": ["Gemma 4", "Nemotron Super", "DeepSeek V4", "Kimi K3"],
+  "supportedSystems": [
+    "h200_sxm",
+    "b200_sxm"
+  ],
   "supportedModels": [
     "google/gemma-4-26B-A4B",
     "nvidia/Llama-3_3-Nemotron-Super-49B-v1",

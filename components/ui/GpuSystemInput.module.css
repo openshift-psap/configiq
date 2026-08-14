@@ -1,6 +1,7 @@
 .wrapper {
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .label {
@@ -12,6 +13,40 @@
   color: var(--t2, #3c3f42);
   line-height: 1.2;
   margin: 0 0 6px 0;
+}
+
+.toggle {
+  position: absolute;
+  top: -2px;
+  right: 10px;
+}
+
+.toggle :global(.pf-v5-c-switch__input:focus-visible ~ .pf-v5-c-switch__toggle) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.wrapper :global(.pf-v5-c-switch) {
+  --pf-v5-c-switch--Height: 18px !important;
+  --pf-v5-c-switch__toggle--Width: 32px !important;
+  --pf-v5-c-switch__toggle--Height: 16px !important;
+  --pf-v5-c-switch__toggle--BorderRadius: 9px !important;
+  font-size: 11px !important;
+}
+
+.wrapper :global(.pf-v5-c-switch__label) {
+  font-size: 11px !important;
+  font-weight: 500;
+}
+
+.wrapper :global(.pf-v5-c-switch__toggle) {
+  width: 32px !important;
+  height: 16px !important;
+}
+
+.wrapper :global(.pf-v5-c-switch__toggle::before) {
+  width: 12px !important;
+  height: 12px !important;
 }
 
 .select {

@@ -6,6 +6,7 @@ export interface AppConfig {
   defaultBackend: string;
   backendVersions: Record<string, string>;
   supportedModels: string[];
+  supportedSystems: string[];
   suggestedModelNames: string[];
   modelRequestUrl: string;
 }
@@ -23,6 +24,7 @@ const FALLBACK: AppConfig = {
     'sglang': '0.5.17',
   },
   supportedModels: [],
+  supportedSystems: [],
   suggestedModelNames: [],
   modelRequestUrl: '',
 };
@@ -43,6 +45,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
       defaultBackend: data.defaultBackend ?? FALLBACK.defaultBackend,
       backendVersions: data.backendVersions ?? FALLBACK.backendVersions,
       supportedModels: data.supportedModels ?? FALLBACK.supportedModels,
+      supportedSystems: data.supportedSystems ?? FALLBACK.supportedSystems,
       suggestedModelNames: data.suggestedModelNames ?? FALLBACK.suggestedModelNames,
       modelRequestUrl: data.modelRequestUrl ?? FALLBACK.modelRequestUrl,
     };
