@@ -3,6 +3,8 @@ ARG NEXT_PUBLIC_AICONFIGURATOR_API_URL=https://aiconfigurator.dev
 
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache git
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
