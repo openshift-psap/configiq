@@ -8,8 +8,9 @@ ConfigIQ uses semantic versioning with git tags to trigger container builds and 
 
 1. **Update package.json version** (optional, for npm tracking):
    ```bash
-   npm version patch|minor|major --no-git-tag-version
+   npm version patch --no-git-tag-version
    ```
+   Use `patch`, `minor`, or `major` depending on the type of release.
 
 2. **Create and push a git tag**:
    ```bash
@@ -20,11 +21,9 @@ ConfigIQ uses semantic versioning with git tags to trigger container builds and 
 3. **GitHub Actions automatically**:
    - Triggers the build workflow (`.github/workflows/build.yml`)
    - Builds the container image
-   - Pushes to GHCR with multiple tags:
-     - `ghcr.io/redhat-performance/configiq:0.2.1` (full semver)
-     - `ghcr.io/redhat-performance/configiq:0.2` (major.minor)
-     - `ghcr.io/redhat-performance/configiq:0` (major only)
-     - `ghcr.io/redhat-performance/configiq:latest` (if on main branch)
+   - Pushes to GHCR with tags:
+     - `ghcr.io/redhat-performance/configiq:0.2.1` (specific version)
+     - `ghcr.io/redhat-performance/configiq:latest` (most recent release)
 
 ## Version Display in UI
 
@@ -35,13 +34,27 @@ The sidebar footer shows:
 
 These are injected at build time by `scripts/inject-build-metadata.js`.
 
-## Manual Workflow Dispatch
+## Container Tags
 
-You can also trigger a build manually from the GitHub Actions UI without creating a tag. This will create branch-based tags (e.g., `main`, `main-abc1234`).
+- **`latest`** - Most recent tagged release (production)
+- **`dev`** - Latest commit from main branch (development)
+- **`0.2.1`** - Specific version tags
 
 ## Container Registry
 
 Published containers: https://github.com/redhat-performance/configiq/pkgs/container/configiq
+
+## Deployment
+
+**Production**:
+```bash
+podman pull ghcr.io/redhat-performance/configiq:latest
+```
+
+**Development**:
+```bash
+podman pull ghcr.io/redhat-performance/configiq:dev
+```
 
 ## Rollback
 
