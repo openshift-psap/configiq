@@ -2,14 +2,15 @@
 // Auto-generated at build time
 
 export const VERSION = {
-  number: '0.2.0',
+  number: process.env.NEXT_PUBLIC_GIT_VERSION || '0.2.0',
   buildTime: process.env.NEXT_PUBLIC_BUILD_TIME || 'dev',
   gitCommit: process.env.NEXT_PUBLIC_GIT_COMMIT || 'dev',
   environment: process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.NODE_ENV || 'development'
 } as const
 
 export function getVersionString(): string {
-  return `v${VERSION.number}`
+  const version = VERSION.number.startsWith('v') ? VERSION.number : `v${VERSION.number}`;
+  return version;
 }
 
 export function getBuildTimeString(): string {
