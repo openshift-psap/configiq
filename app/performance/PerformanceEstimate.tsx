@@ -1549,7 +1549,7 @@ export default function QuickEstimate() {
         <div className={styles.card} style={{ marginBottom: 20 }}>
           <div className={styles.cardHead}>
             <span className={styles.cardTitle}>Memory layout per GPU</span>
-            <span className={styles.cardHint}>{memUsablePerGpu.toFixed(0)} GB usable · {testResult.memory_analysis.tp_size} GPU{testResult.memory_analysis.tp_size > 1 ? 's' : ''} per model instance</span>
+            <span className={styles.cardHint}>{memUsablePerGpu.toFixed(0)} GB usable · {testResult.memory_analysis.tp_size * (testResult.parallelism_strategy.pp_size || 1)} GPU{testResult.memory_analysis.tp_size * (testResult.parallelism_strategy.pp_size || 1) > 1 ? 's' : ''} per model instance</span>
           </div>
           <div className={styles.cardBody}>
             <div style={{ marginBottom: '12px' }}>
@@ -1575,7 +1575,7 @@ export default function QuickEstimate() {
                 </div>
                 {/* KV Cache */}
                 <div style={{
-                  width: `${((testResult.memory_analysis.kv_cache_used_gb || 0) / testResult.memory_analysis.tp_size / memUsablePerGpu) * 100}%`,
+                  width: `${((testResult.memory_analysis.kv_cache_used_gb || 0) / (testResult.memory_analysis.tp_size * (testResult.parallelism_strategy.pp_size || 1)) / memUsablePerGpu) * 100}%`,
                   background: '#f59e0b',
                   display: 'flex',
                   alignItems: 'center',
@@ -1607,7 +1607,7 @@ export default function QuickEstimate() {
               </span>
               <span>
                 <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#f59e0b', marginRight: '6px', borderRadius: '2px' }}></span>
-                KV Cache: <strong>{((testResult.memory_analysis.kv_cache_used_gb || 0) / testResult.memory_analysis.replicas).toFixed(1)} GB</strong>
+                KV Cache: <strong>{((testResult.memory_analysis.kv_cache_used_gb || 0) / (testResult.memory_analysis.tp_size * (testResult.parallelism_strategy.pp_size || 1))).toFixed(1)} GB</strong>
               </span>
               <span>
                 <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#e0e0e0', marginRight: '6px', borderRadius: '2px' }}></span>

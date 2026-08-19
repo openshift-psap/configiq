@@ -37,20 +37,38 @@ export interface SavedEstimate {
 
 const STORAGE_KEY = 'gc-saved-estimates';
 
+function isValidEstimate(value: unknown): value is SavedEstimate {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    typeof obj.model === 'string' &&
+    typeof obj.gpu === 'string' &&
+    typeof obj.results === 'object' &&
+    obj.results !== null
+  );
+}
+
 export function getSavedEstimates(): SavedEstimate[] {
   if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    const estimates = data ? JSON.parse(data) : [];
+    if (!data) return [];
 
-    // Normalize legacy estimates: add ppSize=1 if missing
-    return estimates.map((est: SavedEstimate) => ({
-      ...est,
-      results: {
-        ...est.results,
-        ppSize: est.results.ppSize ?? 1
-      }
-    }));
+    const parsed: unknown = JSON.parse(data);
+    if (!Array.isArray(parsed)) return [];
+
+    // Validate and normalize: filter invalid entries, add ppSize=1 if missing
+    return parsed
+      .filter((item): item is SavedEstimate => isValidEstimate(item))
+      .map((est) => ({
+        ...est,
+        results: {
+          ...est.results,
+          ppSize: est.results.ppSize ?? 1
+        }
+      }));
   } catch (error) {
     console.error('Failed to load saved estimates:', error);
     return [];

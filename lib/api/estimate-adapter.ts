@@ -119,6 +119,12 @@ export async function fetchEstimateAsInferenceResult(
 
   const tp = data.tp ?? input.tp_size
   const pp = data.pp ?? input.pp_size ?? 1
+
+  // Validate PP is a positive integer before using it as a divisor
+  if (!Number.isSafeInteger(pp) || pp < 1) {
+    throw new EstimateError('INVALID_PP_SIZE', 'Pipeline parallel size must be a positive integer')
+  }
+
   const sc = data.serving_config
   const mb = data.memory_breakdown
   const totalVramGb = input.vram_gb ?? null
