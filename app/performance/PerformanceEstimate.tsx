@@ -288,7 +288,10 @@ export default function QuickEstimate() {
     const timer = setTimeout(async () => {
       try {
         const spec = modelSpecs.get(model)
-        const isMoe = (spec?.num_experts ?? 0) > 1
+        // Check both catalog metadata and HF config for MoE detection
+        const catalogExperts = spec?.num_experts ?? 0
+        const hfExperts = (hfConfig?.num_experts as number) ?? (hfConfig?.num_local_experts as number) ?? 0
+        const isMoe = catalogExperts > 1 || hfExperts > 1
 
         const result = await fetchEstimateAsInferenceResult({
           model_path: model,
@@ -625,11 +628,19 @@ export default function QuickEstimate() {
     const ppFlag = testResult.parallelism_strategy.pp_size > 1
       ? ` \\\n  --pipeline-parallel-size ${testResult.parallelism_strategy.pp_size}`
       : '';
+
+    // Only FP16/FP8 are valid --dtype values; quantized modes use --quantization
+    const dtypeValue = testWeightPrecision === 'FP16' ? 'float16' :
+                       testWeightPrecision === 'FP8' ? 'fp8' : 'auto';
+    const quantFlag = (testWeightPrecision === 'INT4' || testWeightPrecision === 'INT8' || testWeightPrecision === 'MXFP4')
+      ? ` \\\n  --quantization ${testResult.vllm_config.quantization}`
+      : '';
+
     const cliCommand = `vllm serve ${model} \\
   --tensor-parallel-size ${testResult.memory_analysis.tp_size}${ppFlag} \\
   --max-model-len auto \\
   --gpu-memory-utilization 0.90 \\
-  --dtype ${testWeightPrecision.toLowerCase()} \\
+  --dtype ${dtypeValue}${quantFlag} \\
   --kv-cache-dtype ${testKVCachePrecision.toLowerCase()} \\
   --max-num-seqs ${testResult.vllm_config?.max_num_seqs || 256}${testResult.vllm_config?.enable_chunked_prefill ? ' \\\n  --enable-chunked-prefill' : ''}`;
 
@@ -725,7 +736,10 @@ export default function QuickEstimate() {
   // Build accordion sections dynamically from current state
   const buildAccordionSections = () => {
     const spec = modelSpecs.get(model);
-    const isMoeModel = (spec?.num_experts ?? 0) > 1;
+    // Check both catalog metadata and HF config for MoE detection
+    const catalogExperts = spec?.num_experts ?? 0;
+    const hfExperts = (hfConfig?.num_experts as number) ?? (hfConfig?.num_local_experts as number) ?? 0;
+    const isMoeModel = catalogExperts > 1 || hfExperts > 1;
 
     return [
     {
@@ -791,7 +805,11 @@ export default function QuickEstimate() {
           type: 'select' as const,
           term: 'weightPrecision',
           options: ['FP16', 'FP8', 'INT8', 'INT4', 'MXFP4'] as const,
-          onChange: (val: string) => setTestWeightPrecision(val as any)
+          onChange: (val: string) => {
+            if (val === 'FP16' || val === 'FP8' || val === 'INT8' || val === 'INT4' || val === 'MXFP4') {
+              setTestWeightPrecision(val);
+            }
+          }
         },
         {
           label: 'KV cache precision',
@@ -799,7 +817,11 @@ export default function QuickEstimate() {
           type: 'select' as const,
           term: 'kvCachePrecision',
           options: ['FP16', 'FP8'] as const,
-          onChange: (val: string) => setTestKVCachePrecision(val as any)
+          onChange: (val: string) => {
+            if (val === 'FP16' || val === 'FP8') {
+              setTestKVCachePrecision(val);
+            }
+          }
         },
         ...(isMoeModel ? [{
           label: 'MoE quantization',
@@ -812,7 +834,12 @@ export default function QuickEstimate() {
             { value: 'w4a16_mxfp4_cutlass', label: 'W4A16 MXFP4 (CUTLASS)' },
             { value: 'w4a8_mxfp4_mxfp8_trtllm', label: 'W4A8 MXFP4+FP8 (TRT-LLM)' }
           ],
-          onChange: (val: string) => setTestMoeQuantMode(val as any),
+          onChange: (val: string) => {
+            if (val === 'w4a16_mxfp4' || val === 'w4a8_mxfp4_mxfp8' ||
+                val === 'w4a16_mxfp4_cutlass' || val === 'w4a8_mxfp4_mxfp8_trtllm') {
+              setTestMoeQuantMode(val);
+            }
+          },
           help: 'W4A16: best quality, H100+. W4A8: ~2× faster on B200. CUTLASS: H100-optimized. TRT-LLM: B200 TRT-LLM variant.'
         }] : []),
       ],

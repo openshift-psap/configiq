@@ -41,7 +41,16 @@ export function getSavedEstimates(): SavedEstimate[] {
   if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    const estimates = data ? JSON.parse(data) : [];
+
+    // Normalize legacy estimates: add ppSize=1 if missing
+    return estimates.map((est: SavedEstimate) => ({
+      ...est,
+      results: {
+        ...est.results,
+        ppSize: est.results.ppSize ?? 1
+      }
+    }));
   } catch (error) {
     console.error('Failed to load saved estimates:', error);
     return [];

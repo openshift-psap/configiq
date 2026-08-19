@@ -193,6 +193,7 @@ export default function ComparePage() {
       ['', ...estimates.map(() => '')], // Separator
       ['GPUs needed', ...estimates.map(e => e.results.gpusRequired.toString())],
       ['TP size', ...estimates.map(e => e.results.tpSize.toString())],
+      ['PP size', ...estimates.map(e => e.results.ppSize.toString())],
       ['Replicas', ...estimates.map(e => e.results.replicas.toString())],
       ['', ...estimates.map(() => '')], // Separator
       ['Self-hosted (5yr)', ...estimates.map(e => `$${(e.results.selfHostedCost5Year / 1000).toFixed(0)}K`)],
@@ -411,6 +412,11 @@ export default function ComparePage() {
                 label="TP size"
                 estimates={estimates}
                 getValue={(e) => e.results.tpSize}
+              />
+              <ComparisonRow
+                label="PP size"
+                estimates={estimates}
+                getValue={(e) => e.results.ppSize}
               />
               <ComparisonRow
                 label="Replicas"

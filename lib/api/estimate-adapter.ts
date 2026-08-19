@@ -118,7 +118,7 @@ export async function fetchEstimateAsInferenceResult(
   }
 
   const tp = data.tp ?? input.tp_size
-  const pp = data.pp ?? 1
+  const pp = data.pp ?? input.pp_size ?? 1
   const sc = data.serving_config
   const mb = data.memory_breakdown
   const totalVramGb = input.vram_gb ?? null
@@ -132,15 +132,18 @@ export async function fetchEstimateAsInferenceResult(
   const maxNumSeqs = sc?.max_num_seqs ?? input.batch_size
   const maxModelLen = sc?.max_model_len ?? (input.isl + input.osl)
 
+  // With pipeline parallel, weights are sharded across TP×PP GPUs
+  const shardCount = tp * pp
+
   return {
     memory_analysis: {
       weight_gb: weightGb,
-      weight_gb_per_gpu: weightGb / tp,
+      weight_gb_per_gpu: weightGb / shardCount,
       total_vram_gb: totalVramGb,
       usable_hbm_per_gpu: usablePerGpu,
       tp_size: tp,
       replicas: 1,
-      kv_cache_budget_gb: usablePerGpu != null ? usablePerGpu - weightGb / tp : null,
+      kv_cache_budget_gb: usablePerGpu != null ? usablePerGpu - weightGb / shardCount : null,
       kv_cache_used_gb: kvCacheGb,
       max_sequences_from_memory: maxNumSeqs,
       kv_category: 'AIC',
