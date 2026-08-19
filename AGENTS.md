@@ -1,6 +1,6 @@
 # AGENTS.md — ConfigIQ
 
-This file gives Claude Code context about this project.
+This file gives coding agents context about this project.
 Read this before making any changes.
 
 ## What this project is
@@ -14,7 +14,7 @@ REST API at aiconfigurator.dev for GPU recommendations and memory estimation.
 - **Framework**: Next.js 14 App Router + TypeScript
 - **UI**: PatternFly v5 (Red Hat's design system) — no Tailwind, no shadcn
 - **Charts**: PatternFly Victory Charts
-- **Fonts**: Plus Jakarta Sans (display, body), JetBrains Mono (numbers, technical labels)
+- **Fonts**: Red Hat Display (headings, metrics), Red Hat Text (body), Red Hat Mono (numbers, code, labels)
 - **Deployment**: Vercel
 
 ## Documentation
@@ -39,7 +39,7 @@ REST API at aiconfigurator.dev for GPU recommendations and memory estimation.
 
 ## Project structure
 
-```
+```text
 app/                    # Next.js App Router pages
   layout.tsx            # Root layout with AppShell
   page.tsx              # Homepage
