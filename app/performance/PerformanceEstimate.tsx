@@ -634,8 +634,15 @@ export default function QuickEstimate() {
     // Only FP16/FP8 are valid --dtype values; quantized modes use --quantization
     const dtypeValue = testWeightPrecision === 'FP16' ? 'float16' :
                        testWeightPrecision === 'FP8' ? 'fp8' : 'auto';
+
+    // Map quantization modes: NVFP4 requires modelopt_fp4, others use backend value
+    let quantValue = testResult.vllm_config.quantization;
+    if (testWeightPrecision === 'NVFP4' && (!quantValue || quantValue === 'auto')) {
+      quantValue = 'modelopt_fp4';
+    }
+
     const quantFlag = (testWeightPrecision === 'INT4' || testWeightPrecision === 'INT8' || testWeightPrecision === 'MXFP4' || testWeightPrecision === 'NVFP4')
-      ? ` \\\n  --quantization ${testResult.vllm_config.quantization}`
+      ? ` \\\n  --quantization ${quantValue}`
       : '';
 
     const cliCommand = `vllm serve ${model} \\
