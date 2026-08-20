@@ -19,13 +19,14 @@ FROM node:20-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
-RUN addgroup -g 1001 -S configiq && adduser -S configiq -u 1001
 
-COPY --from=builder --chown=configiq:configiq /app/.next/standalone ./
-COPY --from=builder --chown=configiq:configiq /app/.next/static ./.next/static
-COPY --from=builder --chown=configiq:configiq /app/public ./public
+COPY --from=builder --chown=1001:0 /app/.next/standalone ./
+COPY --from=builder --chown=1001:0 /app/.next/static ./.next/static
+COPY --from=builder --chown=1001:0 /app/public ./public
 
-USER configiq
+RUN chmod -R g=u /app
+
+USER 1001
 
 EXPOSE 3000
 
