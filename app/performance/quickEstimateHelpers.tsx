@@ -35,6 +35,18 @@ export const GLOSSARY: Record<string, { title: string; body: string }> = {
     title: 'OSL · output sequence length',
     body: 'How many tokens the model generates per response on average.',
   },
+  ttft: {
+    title: 'TTFT · time to first token',
+    body: 'How long from request submission until the first output token arrives. Critical for interactive experiences — users notice delays above 1 second. Primarily driven by prompt length and concurrency (how many other requests are being processed simultaneously).',
+  },
+  tpot: {
+    title: 'TPOT · time per output token',
+    body: 'Milliseconds between each output token during generation. Affects streaming speed — lower values feel more responsive. Typical targets: 10-50ms for interactive chat, can be higher for batch jobs.',
+  },
+  requestLatency: {
+    title: 'Request latency (E2E)',
+    body: 'Total end-to-end time for a request, from submission to completion. Equals TTFT + (OSL × TPOT). Constrains both prefill and decode performance.',
+  },
   concurrent: {
     title: 'Concurrent requests',
     body: 'How many requests are being processed at the same instant — not total daily traffic. Derived from requests/day, the peak multiplier, and how long each request runs. This sets the batch size the GPUs must hold in memory at once.',
@@ -76,8 +88,8 @@ export const GLOSSARY: Record<string, { title: string; body: string }> = {
     body: 'KV cache if every active request filled the model\'s entire context window (max_model_len) at the same time. A safety ceiling — most workloads never reach it.',
   },
   prefix: {
-    title: 'Prefix length',
-    body: 'Number of tokens that are shared across requests (e.g., a system prompt). When prefix caching is enabled, these tokens are computed once and reused, saving memory and compute.',
+    title: 'Shared prefix tokens',
+    body: 'Number of tokens shared across multiple requests (e.g., a system prompt). When prefix caching is enabled, these tokens are computed once and reused, saving memory and compute.',
   },
   prefixCache: {
     title: 'Prefix-cache hit rate',

@@ -27,6 +27,7 @@ function modelSuggestions(): string {
   return names.length > 0 ? names.join(', ') : 'Nemotron, DeepSeek V4, Gemma 4, Kimi';
 }
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
+import { Term } from '@/app/performance/quickEstimateHelpers';
 
 
 // ─── FlipTile (reused from Quick Estimate pattern) ───────────────────────────
@@ -381,7 +382,7 @@ export default function AdvancedEstimate() {
           <div className={styles.cardBody}>
             <div className={styles.paramGrid} style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
               <div>
-                <label className={styles.fieldLabel}>Avg input tokens (ISL)</label>
+                <label className={styles.fieldLabel}>Avg input tokens (ISL) <Term k="isl" /></label>
                 <input
                   type="number"
                   className={invalidISL ? styles.paramInputInvalid : styles.paramInput}
@@ -391,7 +392,7 @@ export default function AdvancedEstimate() {
                 />
               </div>
               <div>
-                <label className={styles.fieldLabel}>Avg output tokens (OSL)</label>
+                <label className={styles.fieldLabel}>Avg output tokens (OSL) <Term k="osl" /></label>
                 <input
                   type="number"
                   className={invalidOSL ? styles.paramInputInvalid : styles.paramInput}
@@ -401,7 +402,7 @@ export default function AdvancedEstimate() {
                 />
               </div>
               <div>
-                <label className={styles.fieldLabel}>Max TTFT (ms)</label>
+                <label className={styles.fieldLabel}>Max TTFT (ms) <Term k="ttft" /></label>
                 <input
                   type="number"
                   className={invalidTTFT ? styles.paramInputInvalid : styles.paramInput}
@@ -412,7 +413,7 @@ export default function AdvancedEstimate() {
                 />
               </div>
               <div>
-                <label className={styles.fieldLabel}>Prefix tokens</label>
+                <label className={styles.fieldLabel}>Shared prefix tokens <Term k="prefix" /></label>
                 <input
                   type="number"
                   className={styles.paramInput}
@@ -438,7 +439,7 @@ export default function AdvancedEstimate() {
                 <AccordionContent isHidden={!expanded.includes('constraints')}>
                   <div className={styles.paramGrid} style={{ marginTop: 8, gridTemplateColumns: 'repeat(3, 1fr)' }}>
                     <div>
-                      <label className={styles.fieldLabel}>Target concurrency</label>
+                      <label className={styles.fieldLabel}>Target concurrency <Term k="concurrent" /></label>
                       <input
                         type="number"
                         className={invalidConcurrency ? styles.paramInputInvalid : styles.paramInput}
@@ -448,7 +449,7 @@ export default function AdvancedEstimate() {
                       />
                     </div>
                     <div>
-                      <label className={styles.fieldLabel}>Max TPOT (ms)</label>
+                      <label className={styles.fieldLabel}>Max TPOT (ms) <Term k="tpot" /></label>
                       <input
                         type="number"
                         className={invalidTpot ? styles.paramInputInvalid : styles.paramInput}
@@ -459,7 +460,7 @@ export default function AdvancedEstimate() {
                       />
                     </div>
                     <div>
-                      <label className={styles.fieldLabel}>Max E2E latency (ms)</label>
+                      <label className={styles.fieldLabel}>Max E2E latency (ms) <Term k="requestLatency" /></label>
                       <input
                         type="number"
                         className={invalidLatency ? styles.paramInputInvalid : styles.paramInput}

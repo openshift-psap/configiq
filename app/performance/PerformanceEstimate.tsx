@@ -776,7 +776,7 @@ export default function QuickEstimate() {
           onChange: (val: string) => handleConcurrentUsersChange(val)
         },
         {
-          label: 'Prefix length (tokens)',
+          label: 'Shared prefix tokens',
           value: prefixInput,
           term: 'prefix',
           type: 'number' as const,
@@ -994,7 +994,7 @@ export default function QuickEstimate() {
         <div className={styles.headRow}>
           <div>
             <h1 className={styles.pageTitle}>Performance estimate</h1>
-            <p className={styles.subtitle}>Start with just a model name. We fill the rest, then let you tune every assumption.</p>
+            <p className={styles.subtitle}>See time to first token, throughput, and memory estimates in seconds — refine as needed.</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <div style={{ position: 'relative' }}>
