@@ -6,6 +6,25 @@ import OutlinedQuestionCircleIcon from '@patternfly/react-icons/dist/esm/icons/o
 import styles from './PerformanceEstimate.module.css';
 
 /* ----------------------------------------------------------------------------
+   Precision metadata — canonical source for bytes/param and descriptions
+   ---------------------------------------------------------------------------- */
+
+export const PRECISION_METADATA = {
+  FP16: { bytes: 2.0, label: 'FP16/BF16', desc: '2 bytes/param (full precision)' },
+  FP8: { bytes: 1.0, label: 'FP8', desc: '1 byte (8-bit float)' },
+  INT8: { bytes: 1.0, label: 'INT8', desc: '1 byte (8-bit integer)' },
+  INT4: { bytes: 0.5, label: 'INT4', desc: '0.5 bytes (4-bit integer)' },
+  MXFP4: { bytes: 0.56, label: 'MXFP4', desc: '0.56 bytes (Microscaling FP4, Hopper+)' },
+  NVFP4: { bytes: 0.58, label: 'NVFP4', desc: '0.58 bytes (NVIDIA FP4, Blackwell only)' },
+} as const;
+
+export const KV_PRECISION_METADATA = {
+  FP16: { bytes: 2.0, label: 'FP16', desc: '2 bytes per element (standard)' },
+  FP8: { bytes: 1.0, label: 'FP8', desc: '1 byte per element (half the memory, slight quality loss)' },
+  NVFP4: { bytes: 0.58, label: 'NVFP4', desc: '0.58 bytes (NVIDIA FP4, Blackwell only)' },
+} as const;
+
+/* ----------------------------------------------------------------------------
    Term — a "?" popover for jargon. Plain-language explanations so business
    users aren't lost. Drop <Term k="kvCache" /> next to any label.
    ---------------------------------------------------------------------------- */
@@ -97,11 +116,11 @@ export const GLOSSARY: Record<string, { title: string; body: string }> = {
   },
   weightPrecision: {
     title: 'Weight precision',
-    body: 'Number format for model parameters. FP16/BF16 = 2 bytes/param (full precision). FP8 = 1 byte (8-bit float). INT8 = 1 byte (8-bit integer). INT4 = 0.5 bytes (4-bit integer). MXFP4 = 0.5 bytes (Microscaling FP4). Lower precision reduces memory but may impact quality.',
+    body: `Number format for model parameters. ${Object.entries(PRECISION_METADATA).map(([k, v]) => `${v.label} = ${v.desc}`).join('. ')}. Lower precision reduces memory but may impact quality.`,
   },
   kvCachePrecision: {
     title: 'KV cache precision',
-    body: 'Number format for key-value cache vectors. FP16 = 2 bytes per element (standard). FP8 = 1 byte per element (half the memory, slight quality loss). Lower precision lets you fit more requests in the same memory.',
+    body: `Number format for key-value cache vectors. ${Object.entries(KV_PRECISION_METADATA).map(([k, v]) => `${v.label} = ${v.desc}`).join('. ')}. Lower precision lets you fit more requests in the same memory.`,
   },
   moeQuantization: {
     title: 'MoE quantization mode',
