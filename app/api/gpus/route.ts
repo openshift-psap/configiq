@@ -1,13 +1,30 @@
 // GET /api/gpus
-// GPU catalog endpoint with filtering + live pricing from Cloudflare Worker
+// GPU catalog endpoint - fetches from AIConfigurator /systems and optionally enriches with live pricing
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { GpuCatalogQuerySchema } from '@/lib/api/schemas'
 import { ApiErrors } from '@/lib/api/errors'
 import { formatGpuCatalogResponse } from '@/lib/api/responses'
-import { GPU_CATALOG, type GpuSpec } from '@/lib/gpu-math/gpus'
+import type { GpuSpec } from '@/lib/gpu-math/gpus'
 import { fetchGPUPricing, aggregateGPUPricing } from '@/lib/api/cloudflare'
+
+// AIConfigurator /systems response schema
+interface AicSystem {
+  id: string
+  name: string
+  vendor: string
+  architecture: string
+  memory_bytes: number
+  memory_bandwidth_bytes: number
+  bf16_tflops: number
+  tdp_watts: number
+  gpus_per_node: number
+}
+
+interface AicSystemsResponse {
+  systems: AicSystem[]
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,8 +45,56 @@ export async function GET(req: NextRequest) {
 
     const validatedQuery = GpuCatalogQuerySchema.parse(query)
 
-    // Start with static GPU catalog
-    let filteredGpus: GpuSpec[] = [...GPU_CATALOG]
+    // Fetch GPU catalog from AIConfigurator
+    const gatewayUrl = process.env.AICONFIGURATOR_GATEWAY_URL || 'https://aiconfigurator.dev'
+    const aicResponse = await fetch(`${gatewayUrl}/systems?include=specs`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+    })
+
+    if (!aicResponse.ok) {
+      throw new Error(`AIConfigurator API error: ${aicResponse.status}`)
+    }
+
+    const aicData: AicSystemsResponse = await aicResponse.json()
+
+    // Transform AIConfigurator systems to GpuSpec format
+    let filteredGpus: GpuSpec[] = aicData.systems.map((sys, idx) => {
+      const vramGb = Math.round(sys.memory_bytes / (1024 ** 3))
+      const memoryBandwidthTbps = sys.memory_bandwidth_bytes / (1024 ** 4)
+
+      return {
+        // New JSON schema fields
+        id: sys.id,
+        name: sys.name,
+        display_name: sys.name,
+        sizer_system_id: sys.id,
+        vendor: sys.vendor as 'nvidia' | 'amd',
+        vram_gb: vramGb,
+        hardware_cost_usd: 0, // TODO: Pricing not yet available from AIConfigurator
+        memory_bandwidth_tbps: memoryBandwidthTbps,
+        tokens_per_dollar: 0, // TODO: Pricing not yet available
+        tflops_bf16: sys.bf16_tflops,
+        tflops_fp8: null,
+        mfu_prefill: 0.5, // Default placeholder
+        mfu_decode: 0.5, // Default placeholder
+        tdp_watts: sys.tdp_watts,
+        architecture: sys.architecture as any,
+        color: `hsl(${(idx * 137.5) % 360}, 70%, 50%)`, // Generated color
+
+        // Legacy backward compatibility fields
+        vramGb: vramGb,
+        memoryBandwidthGbps: sys.memory_bandwidth_bytes / (1024 ** 3),
+        bandwidthTbps: memoryBandwidthTbps,
+        tflops: sys.bf16_tflops,
+        pricePerHour: 0, // TODO: Pricing not yet available from AIConfigurator
+        hardwareCostPerGpu: 0, // TODO: Pricing not yet available
+        powerWatts: sys.tdp_watts,
+        cloudAvailabilityPct: 0, // TODO: Not yet available
+        tpuAvailabilityPct: 0, // TODO: Not yet available
+      } as GpuSpec
+    })
 
     // Optionally enrich with live pricing from Cloudflare Worker
     if (includeLivePricing) {
@@ -40,8 +105,8 @@ export async function GET(req: NextRequest) {
 
         // Enrich each GPU with live pricing
         filteredGpus = filteredGpus.map(gpu => {
-          // Extract GPU model from name (e.g., "H100 SXM 80 GB" → "H100")
-          const gpuModel = gpu.name.split(' ')[0]
+          // Extract GPU model from name (e.g., "NVIDIA H100 SXM" → "H100")
+          const gpuModel = gpu.name.replace('NVIDIA ', '').split(' ')[0]
 
           // Find matching prices from Cloudflare
           const matchingPrices = cloudflareData.prices.filter(p =>
@@ -61,8 +126,12 @@ export async function GET(req: NextRequest) {
 
           console.log(`[GPUs API] ${gpu.name}: on-demand count=${onDemandPricing.count}, spot count=${spotPricing.count}`)
 
+          // Update pricePerHour with live pricing if available
+          const livePrice = onDemandPricing.median ?? spotPricing.median ?? gpu.pricePerHour
+
           return {
             ...gpu,
+            pricePerHour: livePrice,
             livePricing: {
               onDemand: onDemandPricing.count > 0 ? onDemandPricing : undefined,
               spot: spotPricing.count > 0 ? spotPricing : undefined,
@@ -71,7 +140,7 @@ export async function GET(req: NextRequest) {
           }
         })
       } catch (cloudflareError) {
-        // Log error but continue with static pricing
+        // Log error but continue with default pricing
         console.error('[GPUs API] Failed to fetch live pricing from Cloudflare:', cloudflareError)
       }
     }

@@ -4,7 +4,7 @@ LLM inference sizing, GPU comparison, and cost modeling for engineers and infras
 
 **Live at [configiq.dev](https://configiq.dev)**
 
-Built with Next.js + PatternFly, powered by [AIConfigurator](https://aiconfigurator.dev).
+Built with Next.js + PatternFly, powered by the [AIConfigurator](https://github.com/ai-dynamo/aiconfigurator) [REST API](https://aiconfigurator.dev/docs).
 
 ## What it does
 
@@ -51,8 +51,7 @@ npm run lint         # ESLint
 |-------|-----------|
 | Framework | Next.js 14 App Router + TypeScript |
 | UI | PatternFly v5 |
-| Backend API | [AIConfigurator](https://aiconfigurator.dev) (GPU sizing + memory estimation) |
-| Deployment | Vercel |
+| Backend API | [AIConfigurator](https://aiconfigurator.dev/docs) (GPU sizing + memory estimation) |
 
 ## Project structure
 
@@ -66,16 +65,17 @@ app/                  Next.js App Router pages
   gpu-explorer/       GPU Explorer
   hybrid-savings/     Hybrid Savings
   routing/            Routing Economics
-  api/                Next.js API routes (proxy to AIConfigurator)
+  api/                Next.js API routes (proxy to REST APIs)
     recommend/        POST — GPU sizing via AIC /recommend
+    estimate/         POST — GPU performance via AIC /estimate
     memory/           POST — memory breakdown via AIC /memory
-    gpus/             GET — GPU catalog
-    models/           GET — model catalog
+    models/           GET — model catalog via AIC /models
+    gpus/             GET — GPU catalog via AIC /systems + optional live Cloudflare pricing
 components/
   layout/
     AppShell.tsx      Top-nav masthead + sidebar navigation
 lib/
-  gpu-math/           GPU sizing formulas (client-side)
+  gpu-math/           Historical GPU sizing (client-side)
   api/                AIConfigurator API clients
   pricing/            Cloud GPU pricing data
 docs/                 Architecture docs and ADRs
@@ -95,7 +95,7 @@ npm run build        # Must succeed
 
 ### Code conventions
 
-1. **GPU math belongs in `lib/gpu-math/`** — never write sizing formulas inside React components.
+1. **GPU math belongs in `AIConfigurator`** — never write sizing formulas inside React components.
 2. **PatternFly only** — do not add Tailwind, shadcn/ui, or any other component library.
 3. **Sentence case everywhere** — no title case in headings or labels.
 4. **Server components by default** — add `"use client"` only when needed.
