@@ -97,11 +97,11 @@ export const GLOSSARY: Record<string, { title: string; body: string }> = {
   },
   weightPrecision: {
     title: 'Weight precision',
-    body: 'Number format for model parameters. FP16/BF16 = 2 bytes/param (full precision). FP8 = 1 byte (8-bit float). INT8 = 1 byte (8-bit integer). INT4 = 0.5 bytes (4-bit integer). MXFP4 = 0.5 bytes (Microscaling FP4). Lower precision reduces memory but may impact quality.',
+    body: 'Number format for model parameters. FP16/BF16 = 2 bytes/param (full precision). FP8 = 1 byte (8-bit float). INT8 = 1 byte (8-bit integer). INT4 = 0.5 bytes (4-bit integer). MXFP4 = 0.56 bytes (Microscaling FP4, Hopper+). NVFP4 = 0.58 bytes (NVIDIA FP4, Blackwell only). Lower precision reduces memory but may impact quality.',
   },
   kvCachePrecision: {
     title: 'KV cache precision',
-    body: 'Number format for key-value cache vectors. FP16 = 2 bytes per element (standard). FP8 = 1 byte per element (half the memory, slight quality loss). Lower precision lets you fit more requests in the same memory.',
+    body: 'Number format for key-value cache vectors. FP16 = 2 bytes per element (standard). FP8 = 1 byte per element (half the memory, slight quality loss). NVFP4 = 0.58 bytes (NVIDIA FP4, Blackwell only). Lower precision lets you fit more requests in the same memory.',
   },
   moeQuantization: {
     title: 'MoE quantization mode',

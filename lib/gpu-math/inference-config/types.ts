@@ -5,7 +5,7 @@ import type { HFModelConfig } from '@/lib/huggingface/fetch-config'
 
 export interface InferenceRequest {
   model_name: string
-  precision: 'FP16' | 'FP8' | 'INT8' | 'INT4' | 'MXFP4'  // Weight precision
+  precision: 'FP16' | 'FP8' | 'INT8' | 'INT4' | 'MXFP4' | 'NVFP4'  // Weight precision
   gpu_type: string
   gpu_count?: number  // Optional - engine recommends if not provided
   concurrent_users: number
@@ -15,7 +15,7 @@ export interface InferenceRequest {
   sla_priority: 'ttft' | 'tpot' | 'throughput'
 
   // Optional overrides
-  kv_cache_precision?: 'FP16' | 'FP8'  // KV cache dtype (defaults to match weight precision if not specified)
+  kv_cache_precision?: 'FP16' | 'FP8' | 'NVFP4'  // KV cache dtype (defaults to match weight precision if not specified)
   network_topology?: 'nvlink' | 'infiniband' | 'ethernet'
   enable_llmd?: boolean
 

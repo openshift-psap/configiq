@@ -155,8 +155,8 @@ export default function QuickEstimate() {
   const [testTpSize, setTestTpSize] = React.useState(1);
   const [calcTrigger, setCalcTrigger] = React.useState(0);
   const [elapsed, setElapsed] = React.useState(0);
-  const [testWeightPrecision, setTestWeightPrecision] = React.useState<'FP16' | 'FP8' | 'INT8' | 'INT4' | 'MXFP4'>('FP16');
-  const [testKVCachePrecision, setTestKVCachePrecision] = React.useState<'FP16' | 'FP8'>('FP16');
+  const [testWeightPrecision, setTestWeightPrecision] = React.useState<'FP16' | 'FP8' | 'INT8' | 'INT4' | 'MXFP4' | 'NVFP4'>('FP16');
+  const [testKVCachePrecision, setTestKVCachePrecision] = React.useState<'FP16' | 'FP8' | 'NVFP4'>('FP16');
   const [testMoeQuantMode, setTestMoeQuantMode] = React.useState<'w4a16_mxfp4' | 'w4a8_mxfp4_mxfp8' | 'w4a16_mxfp4_cutlass' | 'w4a8_mxfp4_mxfp8_trtllm'>('w4a16_mxfp4');
   const [testPpSize, setTestPpSize] = React.useState(1);
   
@@ -307,11 +307,13 @@ export default function QuickEstimate() {
           gpu_memory_utilization: currentAicGpu?.gpuMemoryUtilization,
           backend_version: backendVersion || undefined,
           hf_model_config: hfConfig as Record<string, unknown> | null,
-          kvcache_quant_mode: testKVCachePrecision === 'FP8' ? 'fp8' : null,
+          kvcache_quant_mode: testKVCachePrecision === 'FP8' ? 'fp8' :
+                             testKVCachePrecision === 'NVFP4' ? 'nvfp4' : null,
           gemm_quant_mode: testWeightPrecision === 'FP8' ? 'fp8' :
                           testWeightPrecision === 'INT8' ? 'int8_wo' :
                           testWeightPrecision === 'INT4' ? 'int4_wo' :
-                          testWeightPrecision === 'MXFP4' ? 'mxfp4' : null,
+                          testWeightPrecision === 'MXFP4' ? 'mxfp4' :
+                          testWeightPrecision === 'NVFP4' ? 'nvfp4' : null,
           moe_quant_mode: isMoe ? testMoeQuantMode : undefined,
           ...(isMoe && { moe_ep_size: testTpSize }),
         });
@@ -632,7 +634,7 @@ export default function QuickEstimate() {
     // Only FP16/FP8 are valid --dtype values; quantized modes use --quantization
     const dtypeValue = testWeightPrecision === 'FP16' ? 'float16' :
                        testWeightPrecision === 'FP8' ? 'fp8' : 'auto';
-    const quantFlag = (testWeightPrecision === 'INT4' || testWeightPrecision === 'INT8' || testWeightPrecision === 'MXFP4')
+    const quantFlag = (testWeightPrecision === 'INT4' || testWeightPrecision === 'INT8' || testWeightPrecision === 'MXFP4' || testWeightPrecision === 'NVFP4')
       ? ` \\\n  --quantization ${testResult.vllm_config.quantization}`
       : '';
 
@@ -804,9 +806,9 @@ export default function QuickEstimate() {
           value: testWeightPrecision,
           type: 'select' as const,
           term: 'weightPrecision',
-          options: ['FP16', 'FP8', 'INT8', 'INT4', 'MXFP4'] as const,
+          options: ['FP16', 'FP8', 'INT8', 'INT4', 'MXFP4', 'NVFP4'] as const,
           onChange: (val: string) => {
-            if (val === 'FP16' || val === 'FP8' || val === 'INT8' || val === 'INT4' || val === 'MXFP4') {
+            if (val === 'FP16' || val === 'FP8' || val === 'INT8' || val === 'INT4' || val === 'MXFP4' || val === 'NVFP4') {
               setTestWeightPrecision(val);
             }
           }
@@ -816,9 +818,9 @@ export default function QuickEstimate() {
           value: testKVCachePrecision,
           type: 'select' as const,
           term: 'kvCachePrecision',
-          options: ['FP16', 'FP8'] as const,
+          options: ['FP16', 'FP8', 'NVFP4'] as const,
           onChange: (val: string) => {
-            if (val === 'FP16' || val === 'FP8') {
+            if (val === 'FP16' || val === 'FP8' || val === 'NVFP4') {
               setTestKVCachePrecision(val);
             }
           }
