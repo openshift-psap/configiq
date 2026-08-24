@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useSettings, AICOSTINGS_API_URL } from '@/contexts/SettingsContext';
+import { useOnPremProfile, DEFAULT_PROFILE, type OnPremCostProfile } from '@/lib/hooks/useOnPremProfile';
 import styles from './Sources.module.css';
 
 interface SourceStatus {
@@ -44,8 +45,15 @@ function SourceBadge({ status }: { status: SourceStatus }) {
   return <span className={styles.unknown}><span className={styles.dot} style={{ background: '#6a6e73' }} />Unknown</span>;
 }
 
+function newProfile(): OnPremCostProfile {
+  return { ...DEFAULT_PROFILE, id: String(Date.now()), name: 'New profile', hardware: { ...DEFAULT_PROFILE.hardware }, datacenter: { ...DEFAULT_PROFILE.datacenter }, lifecycle: { ...DEFAULT_PROFILE.lifecycle } }
+}
+
 export default function Sources() {
   const { preferredCloudProvider, setPreferredCloudProvider } = useSettings();
+  const { profiles, activeProfileId, setActiveProfile, saveProfile, deleteProfile, exportProfile, importProfile } = useOnPremProfile();
+  const [editingProfile, setEditingProfile] = React.useState<OnPremCostProfile | null>(null);
+  const [importText, setImportText] = React.useState('');
   const [health, setHealth] = React.useState<HealthData | null>(null);
   const [healthLoading, setHealthLoading] = React.useState(true);
   const [healthError, setHealthError] = React.useState<string | null>(null);
@@ -179,18 +187,123 @@ export default function Sources() {
         )}
       </div>
 
-      {/* ── Section 3: On-prem cost profiles (placeholder) ── */}
+      {/* ── Section 3: On-prem cost profiles ── */}
       <div className={styles.section}>
         <div className={styles.sectionHead}>
           <div>
             <div className={styles.sectionTitle}>On-prem cost profiles</div>
             <div className={styles.sectionDesc}>
-              Customer-specific hardware, power, and staffing cost profiles. Stored locally.
+              Customer-specific hardware, power, and staffing costs. Stored locally — exportable as JSON.
             </div>
           </div>
+          <button
+            style={{ fontSize: '13px', color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            onClick={() => setEditingProfile(newProfile())}
+          >
+            + New profile
+          </button>
         </div>
-        <div className={styles.emptyState}>
-          On-prem cost profiles coming soon.
+
+        {profiles.length === 0 && !editingProfile && (
+          <div className={styles.emptyState}>
+            No profiles yet. Create one to model on-prem GPU infrastructure costs.
+          </div>
+        )}
+
+        {profiles.length > 0 && (
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Profile name</th>
+                <th>$/node</th>
+                <th>PUE</th>
+                <th>Depreciation</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <span className={styles.sourceName}>{p.name}</span>
+                    {activeProfileId === p.id && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--blue)', fontWeight: 600 }}>ACTIVE</span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: 13, fontFamily: 'var(--mono)' }}>${p.hardware.serverCostPerNode.toLocaleString()}</td>
+                  <td style={{ fontSize: 13, fontFamily: 'var(--mono)' }}>{p.datacenter.pue.toFixed(2)}×</td>
+                  <td style={{ fontSize: 13, fontFamily: 'var(--mono)' }}>{p.lifecycle.depreciationYears}yr</td>
+                  <td style={{ display: 'flex', gap: 8 }}>
+                    <button style={{ fontSize: 12, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => setActiveProfile(activeProfileId === p.id ? null : p.id)}>
+                      {activeProfileId === p.id ? 'Deactivate' : 'Use'}
+                    </button>
+                    <button style={{ fontSize: 12, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => setEditingProfile({ ...p })}>Edit</button>
+                    <button style={{ fontSize: 12, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => { const j = exportProfile(p.id); navigator.clipboard.writeText(j) }}>Copy JSON</button>
+                    <button style={{ fontSize: 12, color: '#c9190b', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => deleteProfile(p.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* Inline profile editor */}
+        {editingProfile && (
+          <div style={{ padding: '16px 20px', borderTop: '1px solid var(--gc-line)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', marginBottom: 16 }}>
+              {(
+                [
+                  ['Profile name', 'text', editingProfile.name, (v: string) => setEditingProfile(p => p && { ...p, name: v })],
+                  ['Server cost per node ($)', 'number', editingProfile.hardware.serverCostPerNode, (v: string) => setEditingProfile(p => p && { ...p, hardware: { ...p.hardware, serverCostPerNode: +v || 0 } })],
+                  ['Storage per TB ($)', 'number', editingProfile.hardware.storageCostPerTb, (v: string) => setEditingProfile(p => p && { ...p, hardware: { ...p.hardware, storageCostPerTb: +v || 0 } })],
+                  ['Networking total ($)', 'number', editingProfile.hardware.networkingCost, (v: string) => setEditingProfile(p => p && { ...p, hardware: { ...p.hardware, networkingCost: +v || 0 } })],
+                  ['Power rate ($/kWh)', 'number', editingProfile.datacenter.powerRatePerKwh, (v: string) => setEditingProfile(p => p && { ...p, datacenter: { ...p.datacenter, powerRatePerKwh: +v || 0 } })],
+                  ['PUE', 'number', editingProfile.datacenter.pue, (v: string) => setEditingProfile(p => p && { ...p, datacenter: { ...p.datacenter, pue: +v || 1 } })],
+                  ['Rack cost/month ($)', 'number', editingProfile.datacenter.rackCostPerMonth, (v: string) => setEditingProfile(p => p && { ...p, datacenter: { ...p.datacenter, rackCostPerMonth: +v || 0 } })],
+                  ['Depreciation (years)', 'number', editingProfile.lifecycle.depreciationYears, (v: string) => setEditingProfile(p => p && { ...p, lifecycle: { ...p.lifecycle, depreciationYears: +v || 5 } })],
+                  ['Maintenance (%/yr)', 'number', editingProfile.lifecycle.maintenancePctPerYear, (v: string) => setEditingProfile(p => p && { ...p, lifecycle: { ...p.lifecycle, maintenancePctPerYear: +v || 0 } })],
+                  ['Staff FTEs per N nodes', 'number', editingProfile.lifecycle.staffFtesPerNNodes, (v: string) => setEditingProfile(p => p && { ...p, lifecycle: { ...p.lifecycle, staffFtesPerNNodes: +v || 0 } })],
+                  ['Staff cost per FTE ($/yr)', 'number', editingProfile.lifecycle.staffCostPerFte, (v: string) => setEditingProfile(p => p && { ...p, lifecycle: { ...p.lifecycle, staffCostPerFte: +v || 0 } })],
+                ] as [string, string, string | number, (v: string) => void][]
+              ).map(([label, type, value, onChange]) => (
+                <label key={label} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--gc-text-2)' }}>
+                  {label}
+                  <input
+                    type={type}
+                    style={{ fontFamily: 'var(--mono)', fontSize: 13, padding: '6px 8px', border: '1px solid var(--gc-line)', borderRadius: 4 }}
+                    value={String(value)}
+                    onChange={e => onChange(e.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ fontSize: 13, padding: '6px 14px', background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
+                onClick={() => { saveProfile(editingProfile!); setEditingProfile(null) }}>Save</button>
+              <button style={{ fontSize: 13, padding: '6px 14px', background: 'none', border: '1px solid var(--gc-line)', borderRadius: 4, cursor: 'pointer' }}
+                onClick={() => setEditingProfile(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Import */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--gc-line)', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            style={{ flex: 1, fontFamily: 'var(--mono)', fontSize: 12, padding: '6px 8px', border: '1px solid var(--gc-line)', borderRadius: 4 }}
+            placeholder="Paste JSON to import a profile…"
+            value={importText}
+            onChange={e => setImportText(e.target.value)}
+          />
+          <button
+            style={{ fontSize: 13, padding: '6px 14px', background: 'none', border: '1px solid var(--gc-line)', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            onClick={() => { importProfile(importText); setImportText('') }}
+          >
+            Import
+          </button>
         </div>
       </div>
     </div>

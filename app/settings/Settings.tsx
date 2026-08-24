@@ -292,7 +292,7 @@ export function Settings() {
                 </span>
               </div>
               <div className={styles.sectionDesc}>
-                Experimental cost modelling powered by the aicostings REST API.
+                Experimental GPU cloud pricing, hardware costs, and on-prem cost modelling.
               </div>
             </div>
             {costingsSaved && <Label color="green" icon={<CheckCircleIcon />}>Saved</Label>}

@@ -17,6 +17,7 @@ import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import { ModelInput } from '@/components/ui/ModelInput';
@@ -28,6 +29,7 @@ function modelSuggestions(): string {
 }
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { Term } from '@/app/performance/quickEstimateHelpers';
+import { HOURS_PER_MONTH, AMORT_MONTHS_3YR } from '@/lib/utils/format';
 
 
 // ─── FlipTile (reused from Quick Estimate pattern) ───────────────────────────
@@ -134,7 +136,8 @@ function friendlyErrorHint(code: string | null): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdvancedEstimate() {
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled } = useSettings();
+  const costings = useCostings(costingsEnabled);
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
 
@@ -310,10 +313,10 @@ export default function AdvancedEstimate() {
   // Cost calculations
   const gpuShortName = (currentGpuOption?.label ?? '').replace(/NVIDIA\s+/i, '').replace(/AMD\s+/i, '').split(' ')[0];
   const livePrice = livePricing[gpuShortName];
-  const hwCost = 30000; // pending Costings REST API
-  const pricePerHour = livePrice ?? hwCost / (36 * 730);
+  const hwCost = costings.gpuHardwareCosts.get(gpuSystem)?.new_usd ?? null;
+  const pricePerHour = livePrice ?? (hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null);
   const numGpus = result?.recommendation.totalGpus ?? 0;
-  const monthlyCost = numGpus * pricePerHour * 730;
+  const monthlyCost = pricePerHour != null ? numGpus * pricePerHour * HOURS_PER_MONTH : null;
 
   return (
     <div className={styles.page}>
