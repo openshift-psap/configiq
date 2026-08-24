@@ -72,7 +72,7 @@ const QUICK_ESTIMATE_TOUR: TourStep[] = [
 
 export default function QuickEstimate() {
   console.log('🔵 QuickEstimate component mounting');
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled } = useSettings();
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
   const [model, setModel] = React.useState('');
@@ -1353,7 +1353,8 @@ export default function QuickEstimate() {
           />
         </div>
 
-        <div style={{ display: 'none' }}>
+        {costingsEnabled && (
+        <div>
           <FlipTile
             front={
             <>
@@ -1453,6 +1454,7 @@ export default function QuickEstimate() {
           }
         />
         </div>
+        )}
       </div>
       )}
 

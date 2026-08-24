@@ -11,12 +11,11 @@ const STORAGE_KEYS = {
   inferenceBackend: 'settings_inference_backend',
   backendVersion: 'settings_backend_version',
   costingsEnabled: 'settings_costings_enabled',
-  costingsApiUrl: 'settings_costings_api_url',
   modelPricingSource: 'settings_model_pricing_source',
   preferredCloudProvider: 'settings_preferred_cloud_provider',
 } as const;
 
-const DEFAULT_COSTINGS_URL = process.env.NEXT_PUBLIC_AICOSTINGS_API_URL ?? 'https://aicostings.dev';
+export const AICOSTINGS_API_URL = process.env.NEXT_PUBLIC_AICOSTINGS_API_URL ?? 'https://aicostings.dev';
 export type ModelPricingSource = 'openrouter' | 'litellm';
 
 interface SettingsState {
@@ -26,7 +25,6 @@ interface SettingsState {
   inferenceBackend: InferenceBackend;
   backendVersion: string;
   costingsEnabled: boolean;
-  costingsApiUrl: string;
   modelPricingSource: ModelPricingSource;
   preferredCloudProvider: string | null;
   setDefaultModel: (v: string) => void;
@@ -34,7 +32,6 @@ interface SettingsState {
   setInferenceBackend: (v: InferenceBackend) => void;
   setBackendVersion: (v: string) => void;
   setCostingsEnabled: (v: boolean) => void;
-  setCostingsApiUrl: (v: string) => void;
   setModelPricingSource: (v: ModelPricingSource) => void;
   setPreferredCloudProvider: (v: string | null) => void;
 }
@@ -46,7 +43,6 @@ const SettingsContext = React.createContext<SettingsState>({
   inferenceBackend: 'vllm',
   backendVersion: '',
   costingsEnabled: false,
-  costingsApiUrl: DEFAULT_COSTINGS_URL,
   modelPricingSource: 'openrouter',
   preferredCloudProvider: null,
   setDefaultModel: () => {},
@@ -54,7 +50,6 @@ const SettingsContext = React.createContext<SettingsState>({
   setInferenceBackend: () => {},
   setBackendVersion: () => {},
   setCostingsEnabled: () => {},
-  setCostingsApiUrl: () => {},
   setModelPricingSource: () => {},
   setPreferredCloudProvider: () => {},
 });
@@ -66,7 +61,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [inferenceBackend, setInferenceBackendState] = React.useState<InferenceBackend>('vllm');
   const [backendVersion, setBackendVersionState] = React.useState('');
   const [costingsEnabled, setCostingsEnabledState] = React.useState(false);
-  const [costingsApiUrl, setCostingsApiUrlState] = React.useState(DEFAULT_COSTINGS_URL);
   const [modelPricingSource, setModelPricingSourceState] = React.useState<ModelPricingSource>('openrouter');
   const [preferredCloudProvider, setPreferredCloudProviderState] = React.useState<string | null>(null);
 
@@ -90,9 +84,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
       const savedCostings = localStorage.getItem(STORAGE_KEYS.costingsEnabled);
       setCostingsEnabledState(savedCostings === 'true');
-
-      const savedUrl = localStorage.getItem(STORAGE_KEYS.costingsApiUrl);
-      setCostingsApiUrlState(savedUrl ?? DEFAULT_COSTINGS_URL);
 
       const savedSource = localStorage.getItem(STORAGE_KEYS.modelPricingSource) as ModelPricingSource | null;
       setModelPricingSourceState(savedSource ?? 'openrouter');
@@ -137,11 +128,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEYS.costingsEnabled, String(v));
   }, []);
 
-  const setCostingsApiUrl = React.useCallback((v: string) => {
-    setCostingsApiUrlState(v);
-    localStorage.setItem(STORAGE_KEYS.costingsApiUrl, v);
-  }, []);
-
   const setModelPricingSource = React.useCallback((v: ModelPricingSource) => {
     setModelPricingSourceState(v);
     localStorage.setItem(STORAGE_KEYS.modelPricingSource, v);
@@ -159,14 +145,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const value = React.useMemo<SettingsState>(
     () => ({
       hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-      costingsEnabled, costingsApiUrl, modelPricingSource, preferredCloudProvider,
+      costingsEnabled, modelPricingSource, preferredCloudProvider,
       setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-      setCostingsEnabled, setCostingsApiUrl, setModelPricingSource, setPreferredCloudProvider,
+      setCostingsEnabled, setModelPricingSource, setPreferredCloudProvider,
     }),
     [hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-     costingsEnabled, costingsApiUrl, modelPricingSource, preferredCloudProvider,
+     costingsEnabled, modelPricingSource, preferredCloudProvider,
      setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-     setCostingsEnabled, setCostingsApiUrl, setModelPricingSource, setPreferredCloudProvider],
+     setCostingsEnabled, setModelPricingSource, setPreferredCloudProvider],
   );
 
   return (

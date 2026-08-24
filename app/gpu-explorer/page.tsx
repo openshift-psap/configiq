@@ -21,6 +21,7 @@ import {
   Text
 } from "@patternfly/react-core";
 import { useAicCatalog, type GpuOption } from '@/lib/hooks/useAicCatalog';
+import { useSettings } from '@/contexts/SettingsContext';
 import { GpuBubbleChart } from './GpuBubbleChart';
 import styles from './gpu-explorer.module.css';
 
@@ -42,6 +43,7 @@ export default function GpuExplorerPage() {
   const [yAxis, setYAxis] = React.useState<YAxis>('throughput-index');
   const [vendorFilter, setVendorFilter] = React.useState<'all' | 'nvidia' | 'amd'>('all');
   const { gpuOptions, isLoading } = useAicCatalog();
+  const { costingsEnabled } = useSettings();
 
   React.useEffect(() => {
     setMounted(true);
@@ -181,7 +183,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={xAxis === 'vram'} onChange={() => setXAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} isDisabled />
+                      {costingsEnabled && <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={xAxis === 'throughput-index'} onChange={() => setXAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={xAxis === 'mem-bw'} onChange={() => setXAxis('mem-bw')} />
                     </ToggleGroup>
@@ -193,7 +195,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={yAxis === 'vram'} onChange={() => setYAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} isDisabled />
+                      {costingsEnabled && <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={yAxis === 'throughput-index'} onChange={() => setYAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={yAxis === 'mem-bw'} onChange={() => setYAxis('mem-bw')} />
                     </ToggleGroup>

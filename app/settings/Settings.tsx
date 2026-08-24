@@ -22,7 +22,7 @@ export function Settings() {
   const {
     hydrated, defaultModel, setDefaultModel, hfToken, setHfToken,
     inferenceBackend, setInferenceBackend, backendVersion, setBackendVersion,
-    costingsEnabled, setCostingsEnabled, costingsApiUrl, setCostingsApiUrl,
+    costingsEnabled, setCostingsEnabled,
     modelPricingSource, setModelPricingSource,
   } = useSettings();
   const { modelOptions, isLoading: catalogLoading } = useAicCatalog();
@@ -34,6 +34,7 @@ export function Settings() {
   const [tokenSaved, setTokenSaved] = React.useState(false);
   const [backendSaved, setBackendSaved] = React.useState(false);
   const [costingsSaved, setCostingsSaved] = React.useState(false);
+  const [costingsOpen, setCostingsOpen] = React.useState(false);
   const [validatedOpen, setValidatedOpen] = React.useState(false);
 
   // Sync local model input once context has loaded from localStorage
@@ -279,81 +280,66 @@ export function Settings() {
         </div>
         {/* ── Costings features ── */}
         <div className={styles.section}>
-          <div className={styles.sectionHead}>
+          <div
+            className={styles.sectionHead}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setCostingsOpen(o => !o)}
+          >
             <div>
               <div className={styles.sectionTitle}>
                 Costings features
-                <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '8px', color: '#6a6e73' }}>preview</span>
+                <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '8px', color: '#6a6e73' }}>
+                  {costingsOpen ? '▲' : '▼'}
+                </span>
               </div>
               <div className={styles.sectionDesc}>
-                Enables experimental cost modelling powered by the aicostings REST API.
-                Off by default — no cost data is fetched unless enabled.
+                Experimental cost modelling powered by the aicostings REST API.
               </div>
             </div>
-            {costingsSaved && (
-              <Label color="green" icon={<CheckCircleIcon />}>Saved</Label>
-            )}
+            {costingsSaved && <Label color="green" icon={<CheckCircleIcon />}>Saved</Label>}
           </div>
-          <div className={styles.fieldWrap}>
-            <Switch
-              id="settings-costings-enabled"
-              label="Costings features enabled"
-              labelOff="Costings features disabled"
-              isChecked={costingsEnabled}
-              onChange={(_e, checked) => {
-                setCostingsEnabled(checked);
-                setCostingsSaved(true);
-                setTimeout(() => setCostingsSaved(false), 2000);
-              }}
-            />
-          </div>
-          {costingsEnabled && (
-            <>
-              <div className={styles.fieldWrap}>
-                <label className={styles.fieldLabel} htmlFor="settings-costings-url">API URL</label>
-                <input
-                  id="settings-costings-url"
-                  type="url"
-                  value={costingsApiUrl}
-                  onChange={e => {
-                    setCostingsApiUrl(e.target.value);
-                    setCostingsSaved(true);
-                    setTimeout(() => setCostingsSaved(false), 2000);
-                  }}
-                  className={styles.textInput}
-                  placeholder="https://aicostings.dev"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <div className={styles.helperText}>
-                  Use <code>http://localhost:8080</code> for local development.
-                </div>
-              </div>
-              <div className={styles.fieldWrap}>
-                <label className={styles.fieldLabel}>Model pricing source</label>
-                <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
-                  {(['openrouter', 'litellm'] as ModelPricingSource[]).map(src => (
-                    <label key={src} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                      <input
-                        type="radio"
-                        name="model-pricing-source"
-                        value={src}
-                        checked={modelPricingSource === src}
-                        onChange={() => {
-                          setModelPricingSource(src);
-                          setCostingsSaved(true);
-                          setTimeout(() => setCostingsSaved(false), 2000);
-                        }}
-                      />
-                      {src === 'openrouter' ? 'OpenRouter' : 'LiteLLM'}
-                    </label>
-                  ))}
-                </div>
-                <div className={styles.helperText}>
-                  Which source to use for LLM API pricing ($/M tokens). Both are independently scraped.
-                </div>
-              </div>
-            </>
+          {costingsOpen && (
+            <div className={styles.fieldWrap}>
+              <Switch
+                id="settings-costings-enabled"
+                label="Enabled"
+                labelOff="Disabled"
+                isChecked={costingsEnabled}
+                onChange={(_e, checked) => {
+                  setCostingsEnabled(checked);
+                  setCostingsSaved(true);
+                  setTimeout(() => setCostingsSaved(false), 2000);
+                }}
+              />
+              {costingsEnabled && (
+                <>
+                  <div style={{ marginTop: '16px' }}>
+                    <label className={styles.fieldLabel}>Model pricing source</label>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
+                      {(['openrouter', 'litellm'] as ModelPricingSource[]).map(src => (
+                        <label key={src} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                          <input
+                            type="radio"
+                            name="model-pricing-source"
+                            value={src}
+                            checked={modelPricingSource === src}
+                            onChange={() => {
+                              setModelPricingSource(src);
+                              setCostingsSaved(true);
+                              setTimeout(() => setCostingsSaved(false), 2000);
+                            }}
+                          />
+                          {src === 'openrouter' ? 'OpenRouter' : 'LiteLLM'}
+                        </label>
+                      ))}
+                    </div>
+                    <div className={styles.helperText}>
+                      Which source to use for LLM API pricing ($/M tokens).
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
