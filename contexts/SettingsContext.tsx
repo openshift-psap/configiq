@@ -11,12 +11,10 @@ const STORAGE_KEYS = {
   inferenceBackend: 'settings_inference_backend',
   backendVersion: 'settings_backend_version',
   costingsEnabled: 'settings_costings_enabled',
-  modelPricingSource: 'settings_model_pricing_source',
   preferredCloudProvider: 'settings_preferred_cloud_provider',
 } as const;
 
 export const AICOSTINGS_API_URL = process.env.NEXT_PUBLIC_AICOSTINGS_API_URL ?? 'https://aicostings.dev';
-export type ModelPricingSource = 'openrouter' | 'litellm';
 
 interface SettingsState {
   hydrated: boolean;
@@ -25,14 +23,12 @@ interface SettingsState {
   inferenceBackend: InferenceBackend;
   backendVersion: string;
   costingsEnabled: boolean;
-  modelPricingSource: ModelPricingSource;
   preferredCloudProvider: string | null;
   setDefaultModel: (v: string) => void;
   setHfToken: (v: string) => void;
   setInferenceBackend: (v: InferenceBackend) => void;
   setBackendVersion: (v: string) => void;
   setCostingsEnabled: (v: boolean) => void;
-  setModelPricingSource: (v: ModelPricingSource) => void;
   setPreferredCloudProvider: (v: string | null) => void;
 }
 
@@ -43,14 +39,12 @@ const SettingsContext = React.createContext<SettingsState>({
   inferenceBackend: 'vllm',
   backendVersion: '',
   costingsEnabled: false,
-  modelPricingSource: 'openrouter',
   preferredCloudProvider: null,
   setDefaultModel: () => {},
   setHfToken: () => {},
   setInferenceBackend: () => {},
   setBackendVersion: () => {},
   setCostingsEnabled: () => {},
-  setModelPricingSource: () => {},
   setPreferredCloudProvider: () => {},
 });
 
@@ -61,7 +55,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [inferenceBackend, setInferenceBackendState] = React.useState<InferenceBackend>('vllm');
   const [backendVersion, setBackendVersionState] = React.useState('');
   const [costingsEnabled, setCostingsEnabledState] = React.useState(false);
-  const [modelPricingSource, setModelPricingSourceState] = React.useState<ModelPricingSource>('openrouter');
   const [preferredCloudProvider, setPreferredCloudProviderState] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -84,9 +77,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
       const savedCostings = localStorage.getItem(STORAGE_KEYS.costingsEnabled);
       setCostingsEnabledState(savedCostings === 'true');
-
-      const savedSource = localStorage.getItem(STORAGE_KEYS.modelPricingSource) as ModelPricingSource | null;
-      setModelPricingSourceState(savedSource ?? 'openrouter');
 
       setPreferredCloudProviderState(localStorage.getItem(STORAGE_KEYS.preferredCloudProvider));
 
@@ -128,11 +118,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEYS.costingsEnabled, String(v));
   }, []);
 
-  const setModelPricingSource = React.useCallback((v: ModelPricingSource) => {
-    setModelPricingSourceState(v);
-    localStorage.setItem(STORAGE_KEYS.modelPricingSource, v);
-  }, []);
-
   const setPreferredCloudProvider = React.useCallback((v: string | null) => {
     setPreferredCloudProviderState(v);
     if (v) {
@@ -145,14 +130,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const value = React.useMemo<SettingsState>(
     () => ({
       hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-      costingsEnabled, modelPricingSource, preferredCloudProvider,
+      costingsEnabled, preferredCloudProvider,
       setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-      setCostingsEnabled, setModelPricingSource, setPreferredCloudProvider,
+      setCostingsEnabled, setPreferredCloudProvider,
     }),
     [hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-     costingsEnabled, modelPricingSource, preferredCloudProvider,
+     costingsEnabled, preferredCloudProvider,
      setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-     setCostingsEnabled, setModelPricingSource, setPreferredCloudProvider],
+     setCostingsEnabled, setPreferredCloudProvider],
   );
 
   return (

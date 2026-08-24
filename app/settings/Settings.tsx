@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Button, Label, Switch } from '@patternfly/react-core';
 import { EyeIcon, EyeSlashIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
-import { useSettings, type InferenceBackend, type ModelPricingSource } from '@/contexts/SettingsContext';
+import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
 import { ModelInput } from '@/components/ui/ModelInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
@@ -23,7 +23,6 @@ export function Settings() {
     hydrated, defaultModel, setDefaultModel, hfToken, setHfToken,
     inferenceBackend, setInferenceBackend, backendVersion, setBackendVersion,
     costingsEnabled, setCostingsEnabled,
-    modelPricingSource, setModelPricingSource,
   } = useSettings();
   const { modelOptions, isLoading: catalogLoading } = useAicCatalog();
 
@@ -313,30 +312,6 @@ export function Settings() {
               />
               {costingsEnabled && (
                 <>
-                  <div style={{ marginTop: '16px' }}>
-                    <label className={styles.fieldLabel}>Model pricing source</label>
-                    <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
-                      {(['openrouter', 'litellm'] as ModelPricingSource[]).map(src => (
-                        <label key={src} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                          <input
-                            type="radio"
-                            name="model-pricing-source"
-                            value={src}
-                            checked={modelPricingSource === src}
-                            onChange={() => {
-                              setModelPricingSource(src);
-                              setCostingsSaved(true);
-                              setTimeout(() => setCostingsSaved(false), 2000);
-                            }}
-                          />
-                          {src === 'openrouter' ? 'OpenRouter' : 'LiteLLM'}
-                        </label>
-                      ))}
-                    </div>
-                    <div className={styles.helperText}>
-                      Which source to use for LLM API pricing ($/M tokens).
-                    </div>
-                  </div>
                 </>
               )}
             </div>

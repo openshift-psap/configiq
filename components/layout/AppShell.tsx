@@ -32,9 +32,11 @@ import {
   ListIcon,
 } from "@patternfly/react-icons";
 import { getVersionString, getBuildTimeString, getShortCommit } from "@/lib/version";
+import { useSettings } from "@/contexts/SettingsContext";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { costingsEnabled } = useSettings();
 
   const masthead = (
     <Masthead style={{ backgroundColor: "#1a1a1a", borderBottom: "1px solid #2d2d2d" }}>
@@ -196,7 +198,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               isActive={false}
             />}
 
-            {false && <>
+            {costingsEnabled && <>
             <div style={groupLabelStyle}>COSTINGS</div>
 
             <NavItemWithIcon
