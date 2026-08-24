@@ -5,6 +5,8 @@ import { Switch, FormSelect, FormSelectOption } from '@patternfly/react-core'
 import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
 import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
+import { useCostings } from '@/lib/hooks/useCostings'
+import { useSettings } from '@/contexts/SettingsContext'
 import { DEFAULT_TIERS } from '@/lib/routing/tier-defaults'
 import { type TierState, computeAllTiers, computeCostVolumePoints, findBreakeven } from '@/lib/routing/calc'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
@@ -65,6 +67,8 @@ export default function RoutingEconomics() {
   const [tiers, setTiers] = React.useState<TierState[]>(initTiers)
   const [livePricing, setLivePricing] = React.useState<Record<string, number>>({})
   const { modelOptions: aicModels, gpuOptions: aicGpus } = useAicCatalog()
+  const { costingsEnabled, preferredCloudProvider } = useSettings()
+  const costings = useCostings(costingsEnabled)
 
   const OPEN_MODELS = React.useMemo(() => aicModels.map(id => ({
     id,
@@ -94,8 +98,20 @@ export default function RoutingEconomics() {
   }, [])
 
   const getRate = React.useCallback(
-    (gpuId: string) => mode === 'cloud' ? getCloudRate(gpuId, livePricing) : getOwnedRate(gpuId),
-    [mode, livePricing],
+    (gpuId: string): number | null => {
+      if (mode === 'cloud') {
+        // Prefer aicostings rate for the selected provider.region
+        if (preferredCloudProvider && costings.gpuCloudRates.size > 0) {
+          const rates = costings.gpuCloudRates.get(gpuId)
+          if (rates && rates[preferredCloudProvider]) {
+            return rates[preferredCloudProvider].on_demand
+          }
+        }
+        return getCloudRate(gpuId, livePricing)
+      }
+      return getOwnedRate(gpuId)
+    },
+    [mode, livePricing, costings.gpuCloudRates, preferredCloudProvider],
   )
 
   const result = React.useMemo(

@@ -22,6 +22,7 @@ import {
 } from "@patternfly/react-core";
 import { useAicCatalog, type GpuOption } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings } from '@/lib/hooks/useCostings';
 import { GpuBubbleChart } from './GpuBubbleChart';
 import styles from './gpu-explorer.module.css';
 
@@ -43,7 +44,8 @@ export default function GpuExplorerPage() {
   const [yAxis, setYAxis] = React.useState<YAxis>('throughput-index');
   const [vendorFilter, setVendorFilter] = React.useState<'all' | 'nvidia' | 'amd'>('all');
   const { gpuOptions, isLoading } = useAicCatalog();
-  const { costingsEnabled } = useSettings();
+  const { costingsEnabled, preferredCloudProvider } = useSettings();
+  const costings = useCostings(costingsEnabled);
 
   React.useEffect(() => {
     setMounted(true);
@@ -64,7 +66,10 @@ export default function GpuExplorerPage() {
   const getAxisValue = (gpu: GpuOption, axis: XAxis | YAxis): number => {
     switch (axis) {
       case 'vram':            return gpu.vramGb ?? 0;
-      case 'price':           return 0; // pending Costings REST API
+      case 'price': {
+        const hw = costings.gpuHardwareCosts.get(gpu.systemId)
+        return hw?.new_usd ?? 0
+      }
       case 'throughput-index': return calculateThroughputIndex(gpu);
       case 'mem-bw':          return (gpu.bandwidthTbps ?? 0) * 1000;
       default:                return 0;

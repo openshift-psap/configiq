@@ -33,6 +33,7 @@ import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import type { InferenceConfigResult } from '@/lib/gpu-math/inference-config';
@@ -72,7 +73,8 @@ const QUICK_ESTIMATE_TOUR: TourStep[] = [
 
 export default function QuickEstimate() {
   console.log('🔵 QuickEstimate component mounting');
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled, preferredCloudProvider } = useSettings();
+  const costings = useCostings(costingsEnabled);
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
   const [model, setModel] = React.useState('');
@@ -485,7 +487,10 @@ export default function QuickEstimate() {
   // Use live pricing if available, fallback to estimated pricing from hardware cost
   const currentAicGpu = aicGpus.find(g => g.systemId === gpu);
   const gpuLabel = currentAicGpu?.label ?? '';
-  const catalogGpuForPricing = null as { hardware_cost_usd: number; name: string } | null; // pending Costings REST API
+  const hwCostEntry = costings.gpuHardwareCosts.get(gpu)
+  const catalogGpuForPricing = hwCostEntry?.new_usd != null
+    ? { hardware_cost_usd: hwCostEntry.new_usd, name: currentAicGpu?.label ?? gpu }
+    : null
 
   // Map GPU to pricing key for live pricing worker (pending Costings REST API)
   const gpuPricingKey = gpuLabel.includes('H200') ? 'H200' :
@@ -494,22 +499,13 @@ export default function QuickEstimate() {
                         gpuLabel.includes('L40S') ? 'L40S' :
                         gpuLabel.includes('MI300X') ? 'MI300X' : gpuLabel;
 
-  const estimatedHourlyPrice = 2.49; // pending Costings REST API
+  const cloudRatesForGpu = costings.gpuCloudRates.get(gpu)
+  const preferredRate = preferredCloudProvider && cloudRatesForGpu
+    ? (cloudRatesForGpu[preferredCloudProvider]?.on_demand ?? null)
+    : null
+  const gpuPricePerHour: number | null = preferredRate ?? livePricing[gpuPricingKey] ?? null;
 
-  const gpuPricePerHour = livePricing[gpuPricingKey] || estimatedHourlyPrice;
-
-  console.log('💰 Pricing lookup:', {
-    gpu,
-    gpuPricingKey,
-    catalogGpu: catalogGpuForPricing?.name,
-    hwCost: catalogGpuForPricing?.hardware_cost_usd,
-    livePricing: Object.keys(livePricing),
-    foundPrice: livePricing[gpuPricingKey],
-    estimatedPrice: estimatedHourlyPrice.toFixed(2),
-    finalPrice: gpuPricePerHour.toFixed(2)
-  });
-
-  const realMonthlyCost = testResult ?
+  const realMonthlyCost = testResult && gpuPricePerHour != null ?
     realGpuCount * gpuPricePerHour * 730 :
     0;
 
