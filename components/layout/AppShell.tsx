@@ -29,6 +29,7 @@ import {
   DollarSignIcon,
   RouteIcon,
   CogIcon,
+  DatabaseIcon,
   ListIcon,
 } from "@patternfly/react-icons";
 import { getVersionString, getBuildTimeString, getShortCommit } from "@/lib/version";
@@ -229,6 +230,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/settings"
               isActive={pathname === "/settings"}
             />
+            {costingsEnabled && (
+              <NavItemWithIcon
+                icon={DatabaseIcon}
+                label="Sources"
+                href="/sources"
+                isActive={pathname === "/sources"}
+              />
+            )}
           </NavList>
         </Nav>
 
