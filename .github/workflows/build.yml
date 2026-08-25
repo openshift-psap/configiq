@@ -11,6 +11,7 @@ jobs:
   build:
     name: Build and push image to GHCR
     runs-on: ubuntu-latest
+    if: github.repository == 'redhat-performance/configiq'
 
     permissions:
       contents: read
