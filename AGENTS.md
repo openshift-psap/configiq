@@ -7,7 +7,8 @@ Read this before making any changes.
 
 ConfigIQ is a web application for LLM inference sizing, GPU comparison, and
 cost modeling. It is deployed at configiq.dev and uses the AIConfigurator
-REST API at aiconfigurator.dev for GPU recommendations and memory estimation.
+REST API (server URL set via `AICONFIGURATOR_GATEWAY_URL`, e.g.
+`https://aiconfigurator.dev`) for GPU recommendations and memory estimation.
 
 ## Tech stack
 
@@ -43,19 +44,29 @@ REST API at aiconfigurator.dev for GPU recommendations and memory estimation.
 app/                    # Next.js App Router pages
   layout.tsx            # Root layout with AppShell
   page.tsx              # Homepage
-  quick-estimate/       # Quick Estimate tool
-  calculator/           # Advanced Calculator tool
+  performance/          # Performance tool
+  recommend/            # Recommend sizing tool
+  kv-cache/             # KV Cache Calculator tool
   gpu-explorer/         # GPU Explorer tool
   hybrid-savings/       # Hybrid Savings tool
   routing/              # Routing Economics tool
+  settings/             # App settings
+  api/                  # Next.js API routes — proxy to AIConfigurator REST API
+    recommend/          # POST — GPU sizing
+    estimate/           # POST — GPU performance
+    memory/             # POST — memory breakdown
+    gpus/               # GET — GPU catalog + optional live pricing
+    hf-config/          # GET — Hugging Face model config lookup
+    health/             # GET — health check
 components/
   layout/
     AppShell.tsx        # Page shell with sidebar nav
 lib/
-  gpu-math/             # ALL GPU sizing formulas live here
-    memory.ts           # Memory estimation
-    throughput.ts       # Throughput estimation
-    cost.ts             # Cost modeling
+  gpu-math/             # Legacy client-side GPU sizing — historical/fallback only
+  api/                  # AIConfigurator API clients — source of truth for GPU math
+  pricing/              # Cloud GPU pricing data
+  hooks/                # useAicCatalog fetches models/GPUs directly from AIC
+                        # client-side, bypassing api/ (inconsistent — follow-up)
   utils/
     format.ts           # Number/unit formatting helpers
 docs/                   # Architecture docs and ADRs
@@ -64,8 +75,11 @@ public/                 # Static assets
 
 ## Critical rules
 
-1. **All GPU math belongs in `lib/gpu-math/`** — never write sizing formulas
-   inside React components. Components call lib functions and display results.
+1. **GPU math belongs in AIConfigurator** — never write sizing formulas inside
+   React components. Components call `lib/api/` clients, which talk to the
+   AIConfigurator REST API via the `app/api/` proxy routes. `lib/gpu-math/` is
+   legacy client-side sizing kept for historical/fallback use only — do not
+   add new formulas there.
 
 2. **PatternFly only for UI** — do not install or use Tailwind, shadcn/ui,
    Material UI, or any other component library. PatternFly is the single
@@ -135,9 +149,9 @@ When PatternFly's default component text is lighter or smaller than the above
 (e.g. DescriptionList term, helper text, table caption), override it to meet
 these values rather than accepting the default.
 
-## Interaction polish (Quick Estimate specific)
+## Interaction polish (Performance page specific)
 
-The Quick Estimate page (`/quick-estimate`) has specific interaction patterns
+The Performance page (`/performance`) has specific interaction patterns
 that must be preserved:
 
 - **Flip tiles** — result tiles flip on click/Enter to reveal formulas. Use

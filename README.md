@@ -10,8 +10,8 @@ Built with Next.js + PatternFly, powered by the [AIConfigurator](https://github.
 
 | Tool | Description |
 |------|-------------|
-| **Quick Estimate** | Fast GPU memory and cost estimate from model + load profile |
-| **Advanced Calculator** | Detailed sizing with batching, quantization, and cost modeling |
+| **Performance** | Fast GPU memory and cost estimate from model + load profile |
+| **Recommend Sizing** | Detailed sizing with batching, quantization, and cost modeling |
 | **KV Cache Calculator** | Memory breakdown and KV cache capacity analysis |
 | **GPU Explorer** | Compare GPUs across memory, throughput, cost, and availability |
 | **Hybrid Savings** | Model cost savings across cloud, on-premise, and hybrid strategies |
@@ -59,18 +59,20 @@ npm run lint         # ESLint
 app/                  Next.js App Router pages
   layout.tsx          Root layout, fonts, PatternFly CSS imports
   page.tsx            Homepage
-  quick-estimate/     Quick Estimate tool
-  calculator/         Advanced Calculator
+  performance/        Performance tool
+  recommend/          Recommend sizing tool
   kv-cache/           KV Cache Calculator
   gpu-explorer/       GPU Explorer
   hybrid-savings/     Hybrid Savings
   routing/            Routing Economics
+  settings/           App settings
   api/                Next.js API routes (proxy to REST APIs)
     recommend/        POST — GPU sizing via AIC /recommend
     estimate/         POST — GPU performance via AIC /estimate
     memory/           POST — memory breakdown via AIC /memory
-    models/           GET — model catalog via AIC /models
     gpus/             GET — GPU catalog via AIC /systems + optional live Cloudflare pricing
+    hf-config/        GET — Hugging Face model config lookup
+    health/           GET — health check
 components/
   layout/
     AppShell.tsx      Top-nav masthead + sidebar navigation
@@ -78,6 +80,8 @@ lib/
   gpu-math/           Historical GPU sizing (client-side)
   api/                AIConfigurator API clients
   pricing/            Cloud GPU pricing data
+  hooks/              useAicCatalog fetches models/GPUs directly from AIC
+                      client-side, bypassing api/ (inconsistent — follow-up)
 docs/                 Architecture docs and ADRs
 ```
 
