@@ -20,6 +20,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import { ModelInput } from '@/components/ui/ModelInput';
+import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 
 function modelSuggestions(): string {
@@ -137,6 +138,12 @@ export default function AdvancedEstimate() {
   const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend } = useSettings();
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
+
+  const modelItems: ComboBoxItem[] = React.useMemo(() =>
+    aicModels.map(m => {
+      const slash = m.indexOf('/');
+      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+    }), [aicModels]);
 
   // Input state
   const [model, setModel] = React.useState('');
@@ -330,15 +337,15 @@ export default function AdvancedEstimate() {
         {/* Model + GPU row */}
         <div className={styles.inputGrid}>
           <div>
-            <ModelInput
+            <ComboBox
               id="adv-model"
-              model={model}
+              value={model}
               onChange={setModel}
-              modelOptions={aicModels}
-              isLoading={catalogLoading}
-              hfToken={hfToken}
-              status={modelStatus}
+              items={modelItems}
               placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
+              allowCustom
+              supportedModels={aicModels}
+              hfToken={hfToken}
             />
           </div>
 

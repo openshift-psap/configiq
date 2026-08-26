@@ -8,7 +8,8 @@ import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext'
 import { getAppConfig } from '@/lib/app-config'
-import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput'
+import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
+import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput'
 import type { KvCacheCalcResult } from '@/lib/api/kv-cache-calc'
 import styles from './KvCacheCalc.module.css'
@@ -88,6 +89,12 @@ export default function KvCacheCalc() {
     const n = parseInt(digits, 10);
     if (!isNaN(n) && n >= 1) setMaxBatchSize(n);
   };
+
+  const modelItems: ComboBoxItem[] = React.useMemo(() =>
+    aicModels.map(m => {
+      const slash = m.indexOf('/');
+      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+    }), [aicModels]);
 
   const handleTpSizeChange = (raw: string) => {
     const digits = raw.replace(/[^0-9]/g, '');
@@ -194,13 +201,14 @@ export default function KvCacheCalc() {
       <div className={styles.inputCard}>
         <div className={styles.inputRow}>
           <div className={styles.field}>
-            <ModelInput
+            <ComboBox
               id="kv-model"
-              model={model}
+              value={model}
               onChange={setModel}
-              modelOptions={aicModels}
-              isLoading={catalogLoading}
-              status={kvModelStatus}
+              items={modelItems}
+              placeholder="Type model name or select from dropdown..."
+              allowCustom
+              supportedModels={aicModels}
             />
           </div>
 

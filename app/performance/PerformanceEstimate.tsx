@@ -29,6 +29,7 @@ import { saveEstimate, getSavedEstimateCount } from '@/lib/saved-estimates';
 import { fetchEstimateAsInferenceResult, EstimateError } from '@/lib/api/estimate-adapter';
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
+import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
@@ -77,6 +78,12 @@ export default function QuickEstimate() {
 
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
+
+  const modelItems: ComboBoxItem[] = React.useMemo(() =>
+    aicModels.map(m => {
+      const slash = m.indexOf('/');
+      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+    }), [aicModels]);
 
   // Set model from settings after context has loaded from localStorage
   const modelFromSettings = React.useRef(false);
@@ -1032,14 +1039,15 @@ export default function QuickEstimate() {
         <div className={styles.inputRow}>
           {/* Column 1: Model field */}
           <div>
-            <ModelInput
+            <ComboBox
               id="qe-model"
-              model={model}
+              value={model}
               onChange={setModel}
-              modelOptions={aicModels}
-              isLoading={catalogLoading}
+              items={modelItems}
+              placeholder="Type model name or select from dropdown..."
+              allowCustom
+              supportedModels={aicModels}
               hfToken={hfToken}
-              status={modelStatus}
             />
           </div>
 
