@@ -552,6 +552,28 @@ class TestSystems:
 # ─── Integration tests (require SDK) ─────────────────────────────────────────
 
 
+# A 422 from these endpoints can mean either "the fallback perf database has no
+# data for this model/backend/system" (expected in CI, safe to skip) or a
+# genuine validation / unsupported-input error (must fail). Distinguish by the
+# error detail: only the no-perf-data / no-feasible-config messages are skipped.
+# Pydantic request-validation errors carry a list detail, so they never match.
+_NO_PERF_DATA_MARKERS = (
+    "no feasible",                     # NoFeasibleConfigError
+    "no performance data available",   # _common_error_handler perf-data path
+    "no configuration meets",          # /recommend fallback (no config found)
+)
+
+
+def _missing_perf_data(resp) -> bool:
+    if resp.status_code != 422:
+        return False
+    detail = resp.json().get("detail")
+    if not isinstance(detail, str):
+        return False
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _NO_PERF_DATA_MARKERS)
+
+
 @pytest.mark.skipif(
     not _sdk_available(),
     reason="aiconfigurator SDK not installed or missing perf data",
@@ -565,8 +587,8 @@ class TestIntegration:
             "target_concurrency": 32,
             "top_n": 1,
         })
-        if resp.status_code == 422:
-            pytest.skip("no feasible config with the available (low-fidelity fallback) perf data")
+        if _missing_perf_data(resp):
+            pytest.skip("no perf data for this model/backend/system in the fallback database")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["configs"]) == 1
@@ -583,8 +605,8 @@ class TestIntegration:
             "target_concurrency": 32,
             "top_n": 1,
         })
-        if resp.status_code == 422:
-            pytest.skip("no feasible config with the available (low-fidelity fallback) perf data")
+        if _missing_perf_data(resp):
+            pytest.skip("no perf data for this model/backend/system in the fallback database")
         assert resp.status_code == 200
         cfg = resp.json()["configs"][0]
         assert cfg["serving_config"] is not None
@@ -598,8 +620,8 @@ class TestIntegration:
             "backend_version": "0.24.0",
             "tp_size": 2,
         })
-        if resp.status_code == 422:
-            pytest.skip("no feasible config with the available (low-fidelity fallback) perf data")
+        if _missing_perf_data(resp):
+            pytest.skip("no perf data for this model/backend/system in the fallback database")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_kv_size_bytes"] > 0
@@ -627,8 +649,8 @@ class TestIntegration:
             "tp_size": 2,
             "batch_size": 48,
         })
-        if resp.status_code == 422:
-            pytest.skip("no feasible config with the available (low-fidelity fallback) perf data")
+        if _missing_perf_data(resp):
+            pytest.skip("no perf data for this model/backend/system in the fallback database")
         assert resp.status_code == 200
         data = resp.json()
         assert data["ttft"] > 0
@@ -644,8 +666,8 @@ class TestIntegration:
             "tp_size": 2,
             "batch_size": 48,
         })
-        if resp.status_code == 422:
-            pytest.skip("no feasible config with the available (low-fidelity fallback) perf data")
+        if _missing_perf_data(resp):
+            pytest.skip("no perf data for this model/backend/system in the fallback database")
         assert resp.status_code == 200
         cfg = resp.json()
         assert cfg["serving_config"] is not None
