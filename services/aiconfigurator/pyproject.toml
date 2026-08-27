@@ -19,6 +19,25 @@ dependencies = [
     "aiconfigurator-core",
 ]
 
+# Opt-in observability + MCP. Kept out of the base install (and the default
+# container) because otel tracing initializes an OTLP exporter eagerly at import
+# and would emit export errors without a collector. Enable with
+# `pip install ".[otel]"`; the app's guarded imports light up /metrics, tracing,
+# and the MCP server only when these are present.
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-requests",
+    "opentelemetry-instrumentation-urllib3",
+    "opentelemetry-exporter-prometheus",
+    "prometheus-client",
+    "psutil",
+    "fastapi-mcp",
+    "mcp<2.0",  # required for fastapi-mcp compatibility
+]
+
 [dependency-groups]
 dev = [
     "pytest",

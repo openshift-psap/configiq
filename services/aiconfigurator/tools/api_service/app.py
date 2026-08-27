@@ -13,15 +13,17 @@ import json
 import logging
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import ORJSONResponse, Response
 from pydantic import BaseModel, Field, model_validator
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from aiconfigurator.cli.api import cli_estimate, cli_recommend
 from aiconfigurator.sdk.common import get_default_models
@@ -30,6 +32,30 @@ from aiconfigurator.sdk.memory import estimate_kv_cache
 from aiconfigurator.sdk.utils import get_model_config_from_model_path
 from aiconfigurator_core.sdk.common import SupportedSystems
 from aiconfigurator_core.sdk.perf_database import load_system_spec
+
+try:
+    from .metrics import init_metrics, record_http_request
+    from .otel import get_meter_provider, get_otlp_metrics, init_otel_metrics, init_otel_tracing
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+    init_otel_metrics = None
+    get_meter_provider = None
+    get_otlp_metrics = None
+    init_metrics = None
+    record_http_request = None
+
+try:
+    from fastapi_mcp import FastApiMCP
+    _MCP_AVAILABLE = True
+except ImportError:
+    _MCP_AVAILABLE = False
+
+try:
+    import prometheus_client  # noqa: F401  (availability probe; re-imported locally in get_metrics)
+    _PROMETHEUS_AVAILABLE = True
+except ImportError:
+    _PROMETHEUS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -543,12 +569,86 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+# Initialize OpenTelemetry if available
+if _OTEL_AVAILABLE:
+    init_otel_tracing()
+    init_otel_metrics()
+    init_metrics()
+
+
+# ─── Metrics Middleware ──────────────────────────────────────────────────────
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Middleware to collect HTTP request metrics."""
+
+    async def dispatch(self, request: Request, call_next):
+        if not _OTEL_AVAILABLE or not record_http_request:
+            return await call_next(request)
+
+        start_time = time.time()
+
+        # Get request size from Content-Length header
+        content_length = request.headers.get('content-length', '0')
+        request_bytes = int(content_length) if content_length.isdigit() else 0
+
+        # Process request
+        response = await call_next(request)
+
+        # Calculate duration
+        duration = time.time() - start_time
+
+        # Get endpoint route template (not raw path) to avoid cardinality explosion
+        # For /systems/{id}/foo, this returns "/systems/{id}/foo", not "/systems/123/foo"
+        endpoint = request.url.path
+        if hasattr(request, 'scope') and request.scope.get('route'):
+            route = request.scope['route']
+            if hasattr(route, 'path'):
+                endpoint = route.path
+        # Fallback for unmatched routes (404s): use raw path but limit cardinality
+        elif response.status_code == 404:
+            endpoint = "<unmatched>"
+
+        # Get response size (if available)
+        response_bytes = 0
+        if hasattr(response, 'body') and response.body:
+            response_bytes = len(response.body)
+        elif 'content-length' in response.headers:
+            response_bytes = int(response.headers['content-length'])
+
+        # Record metrics
+        record_http_request(
+            method=request.method,
+            endpoint=endpoint,
+            status_code=response.status_code,
+            request_bytes=request_bytes,
+            response_bytes=response_bytes,
+            duration=duration
+        )
+
+        return response
+
+
+app.add_middleware(MetricsMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize MCP server if available
+# MCP exposes our API as tools for MCP-compatible clients
+# fastapi-mcp automatically exposes FastAPI endpoints as MCP tools
+if _MCP_AVAILABLE:
+    mcp = FastApiMCP(
+        app,
+        name="aiconfigurator",
+        description="GPU recommendation and performance estimation for LLM inference",
+    )
+    logger.info("MCP server initialized - SSE endpoint at /mcp")
+else:
+    logger.info("MCP server unavailable (install with: pip install 'aiconfigurator[service]')")
 
 
 @app.on_event("startup")
@@ -828,6 +928,48 @@ def get_systems(
                 logger.warning("failed to load spec for %s", sys_id)
         systems.append(entry)
     return {"systems": systems}
+
+
+@app.get("/metrics")
+def get_metrics(request: Request):
+    """Expose metrics in Prometheus or OTLP JSON format based on Accept header.
+
+    Supports content negotiation:
+    - Accept: text/plain → Prometheus/OpenMetrics text format
+    - Accept: application/json → OTLP JSON format (for pmdaopentelemetry)
+
+    Default (no Accept header): Prometheus text format
+    """
+    if not _OTEL_AVAILABLE or not _PROMETHEUS_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Metrics unavailable (install with: pip install 'aiconfigurator[service]')"
+        )
+
+    # Get Accept header for content negotiation
+    accept = request.headers.get("accept", "text/plain").lower()
+
+    # OTLP JSON format
+    if "application/json" in accept:
+        otlp_data = get_otlp_metrics()
+        if not otlp_data:
+            raise HTTPException(
+                status_code=503,
+                detail="OTLP metrics reader not initialized"
+            )
+        return otlp_data
+
+    # Prometheus text format (default)
+    from prometheus_client import REGISTRY, generate_latest
+
+    # Note: OpenTelemetry metrics are in-memory per-worker, not aggregated across
+    # multiple uvicorn workers. For production multi-worker deployments, use a
+    # separate metrics aggregator or scrape each worker individually.
+    metrics_output = generate_latest(REGISTRY)
+    return Response(
+        content=metrics_output,
+        media_type="text/plain; version=0.0.4; charset=utf-8"
+    )
 
 
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
