@@ -1,0 +1,54 @@
+[project]
+name = "aiconfigurator-api"
+version = "0.1.0"
+description = "Thin FastAPI REST wrapper over the aiconfigurator SDK (GPU sizing, performance and memory estimation)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "orjson",
+    "pandas",
+    "pyarrow",
+    # aiconfigurator SDK + its Rust-compiled core, consumed as wheels published
+    # by the Red Hat fork (see [tool.uv] find-links below and the Containerfile).
+    # Not vendored as source into this repo.
+    "aiconfigurator",
+    "aiconfigurator-core",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "numpy",
+    "httpx",  # required by fastapi.testclient.TestClient
+    "ruff",
+]
+
+# The aiconfigurator SDK wheels are published as GitHub Release assets by the
+# Red Hat fork, not on PyPI. Platform availability (currently manylinux x86_64
+# only) is dictated by that upstream, not enforced here — this service imposes
+# no platform or version constraints of its own.
+[tool.uv]
+find-links = [
+    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Blind `except Exception` is a deliberate pattern in this thin API wrapper:
+# endpoint boundaries translate any error into a proper HTTP status, and
+# best-effort lookups degrade gracefully rather than failing the request.
+ignore = ["BLE001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aiconfigurator", "aiconfigurator_core", "tools"]

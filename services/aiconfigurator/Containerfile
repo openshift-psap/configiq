@@ -1,0 +1,52 @@
+# AIConfigurator REST API service.
+#
+# Unlike the aiconfigurator monorepo's Containerfile (a multi-stage Rust/maturin
+# wheel *builder*), this image just installs the already-published aiconfigurator
+# SDK wheels from the Red Hat fork's GitHub Releases and layers the thin FastAPI
+# wrapper on top. Bump the SDK by re-pointing AIC_WHEELS_URL at a different
+# release tag; no version is pinned here.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH=/opt/venv/bin:${PATH}
+
+# GitHub Release that hosts the aiconfigurator / aiconfigurator-core wheels.
+# Defaults to the rolling "latest" build of the fork's deploy/api branch.
+# Override at build time to pin a specific release, e.g.
+#   --build-arg AIC_WHEELS_URL=.../expanded_assets/deploy-api-v0.11.0+ce6a0fff
+ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+
+# aiconfigurator + its Rust-compiled core from the fork's release assets, plus
+# the FastAPI runtime deps.
+RUN /opt/venv/bin/pip install --no-cache-dir \
+        --find-links "${AIC_WHEELS_URL}" \
+        aiconfigurator aiconfigurator-core \
+        fastapi "uvicorn[standard]" pydantic orjson pandas pyarrow
+
+# Thin REST wrapper. CMD imports it as api_service.app:app.
+COPY tools/api_service /app/api_service
+
+# OpenShift / rootless compatibility: numeric UID 1001, group 0 (root group),
+# group-writable so an arbitrary assigned UID can still write.
+RUN chown -R 1001:0 /app /opt/venv \
+    && chmod -R g=u /app /opt/venv
+
+USER 1001
+
+EXPOSE 7860
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD /opt/venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/systems', timeout=5)" || exit 1
+
+CMD ["uvicorn", "api_service.app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "2"]

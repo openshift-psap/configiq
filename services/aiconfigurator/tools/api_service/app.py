@@ -365,7 +365,7 @@ def _row_to_config(row: pd.Series, req: RecommendRequest) -> RecommendConfig:
         if val is None or (isinstance(val, float) and pd.isna(val)):
             continue
         col_str = str(col)
-        if col_str.startswith("(p)") or col_str.startswith("(d)") or col_str.startswith("(e)"):
+        if col_str.startswith(("(p)", "(d)", "(e)")):
             continue
         key = _COLUMN_MAP.get(col_str, col_str)
         if isinstance(val, float) and val == int(val) and key in _INT_FIELDS:
@@ -516,6 +516,7 @@ def _load_device_names_from_perf_data() -> dict[str, str]:
                         device_names[sys_id] = table.column("device")[0].as_py()
                         break
                 except Exception:
+                    logger.debug("could not read device name from %s", parquet_file)
                     continue
 
     logger.info("Loaded %d device display names from perf data", len(device_names))
