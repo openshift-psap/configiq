@@ -12,6 +12,8 @@ dependencies = [
     "orjson",
     "pandas",
     "pyarrow",
+    # Shared ConfigIQ utilities (GPU systems catalog, observability, MCP wiring).
+    "configiq",
     # aiconfigurator SDK + its Rust-compiled core, consumed as wheels published
     # by the Red Hat fork (see [tool.uv] find-links below and the Containerfile).
     # Not vendored as source into this repo.
@@ -19,24 +21,13 @@ dependencies = [
     "aiconfigurator-core",
 ]
 
-# Opt-in observability + MCP. Kept out of the base install (and the default
-# container) because otel tracing initializes an OTLP exporter eagerly at import
-# and would emit export errors without a collector. Enable with
-# `pip install ".[otel]"`; the app's guarded imports light up /metrics, tracing,
-# and the MCP server only when these are present.
+# Opt-in observability + MCP, both provided by the shared configiq package. Kept
+# out of the base install (and enabled explicitly in the container) because otel
+# tracing initializes an OTLP exporter eagerly at import; the app's guarded
+# imports light up /metrics, tracing, and the MCP server only when present.
 [project.optional-dependencies]
-otel = [
-    "opentelemetry-sdk",
-    "opentelemetry-exporter-otlp-proto-http",
-    "opentelemetry-instrumentation-fastapi",
-    "opentelemetry-instrumentation-requests",
-    "opentelemetry-instrumentation-urllib3",
-    "opentelemetry-exporter-prometheus",
-    "prometheus-client",
-    "psutil",
-    "fastapi-mcp",
-    "mcp<2.0",  # required for fastapi-mcp compatibility
-]
+otel = ["configiq[otel]"]
+mcp = ["configiq[mcp]"]
 
 [dependency-groups]
 dev = [
@@ -45,6 +36,12 @@ dev = [
     "httpx",  # required by fastapi.testclient.TestClient
     "ruff",
 ]
+
+# configiq is developed in-tree as a path dependency so local edits are picked up
+# without reinstalling. The container build (context = services/) installs it
+# from ./configiq-py before this service.
+[tool.uv.sources]
+configiq = { path = "../configiq-py", editable = true }
 
 # The aiconfigurator SDK wheels are published as GitHub Release assets by the
 # Red Hat fork, not on PyPI. Platform availability (currently manylinux x86_64

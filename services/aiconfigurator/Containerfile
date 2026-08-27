@@ -1,10 +1,15 @@
 # AIConfigurator REST API service.
 #
+# Build context is services/ (not this directory) so the image can pull in the
+# shared configiq-py package alongside this service. Build from the repo root:
+#
+#   podman build -f services/aiconfigurator/Containerfile -t aiconfigurator services/
+#
 # Unlike the aiconfigurator monorepo's Containerfile (a multi-stage Rust/maturin
 # wheel *builder*), this image just installs the already-published aiconfigurator
 # SDK wheels from the Red Hat fork's GitHub Releases and layers the thin FastAPI
-# wrapper on top. Bump the SDK by re-pointing AIC_WHEELS_URL at a different
-# release tag; no version is pinned here.
+# wrapper (plus the shared configiq package) on top. Bump the SDK by re-pointing
+# AIC_WHEELS_URL at a different release tag; no version is pinned here.
 
 FROM python:3.12-slim
 
@@ -27,6 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip
 
+# Shared ConfigIQ library, with the observability + MCP extras so /metrics,
+# tracing, and the MCP server light up in the deployed container.
+COPY configiq-py /src/configiq-py
+RUN /opt/venv/bin/pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
+
 # aiconfigurator + its Rust-compiled core from the fork's release assets, plus
 # the FastAPI runtime deps.
 RUN /opt/venv/bin/pip install --no-cache-dir \
@@ -35,7 +45,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir \
         fastapi "uvicorn[standard]" pydantic orjson pandas pyarrow
 
 # Thin REST wrapper. CMD imports it as api_service.app:app.
-COPY tools/api_service /app/api_service
+COPY aiconfigurator/tools/api_service /app/api_service
 
 # OpenShift / rootless compatibility: numeric UID 1001, group 0 (root group),
 # group-writable so an arbitrary assigned UID can still write.

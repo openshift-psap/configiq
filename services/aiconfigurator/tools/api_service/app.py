@@ -13,49 +13,39 @@ import json
 import logging
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import uvicorn
+from configiq.systems import load_device_names_from_perf_data, supported_systems
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse, Response
+from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field, model_validator
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from aiconfigurator.cli.api import cli_estimate, cli_recommend
 from aiconfigurator.sdk.common import get_default_models
 from aiconfigurator.sdk.errors import NoFeasibleConfigError
 from aiconfigurator.sdk.memory import estimate_kv_cache
 from aiconfigurator.sdk.utils import get_model_config_from_model_path
-from aiconfigurator_core.sdk.common import SupportedSystems
 from aiconfigurator_core.sdk.perf_database import load_system_spec
 
+# Optional observability + MCP, provided by the shared configiq package
+# (configiq[otel,mcp]). Kept out of the base install/container because otel
+# tracing opens an OTLP exporter eagerly at import; every use is guarded so the
+# service runs unchanged when the extras are absent.
 try:
-    from .metrics import init_metrics, record_http_request
-    from .otel import get_meter_provider, get_otlp_metrics, init_otel_metrics, init_otel_tracing
-    _OTEL_AVAILABLE = True
+    from configiq import observability
+    _OBS = True
 except ImportError:
-    _OTEL_AVAILABLE = False
-    init_otel_metrics = None
-    get_meter_provider = None
-    get_otlp_metrics = None
-    init_metrics = None
-    record_http_request = None
+    _OBS = False
 
 try:
-    from fastapi_mcp import FastApiMCP
-    _MCP_AVAILABLE = True
+    from configiq import mcp as mcp_support
+    _MCP = True
 except ImportError:
-    _MCP_AVAILABLE = False
-
-try:
-    import prometheus_client  # noqa: F401  (availability probe; re-imported locally in get_metrics)
-    _PROMETHEUS_AVAILABLE = True
-except ImportError:
-    _PROMETHEUS_AVAILABLE = False
+    _MCP = False
 
 logger = logging.getLogger(__name__)
 
@@ -502,56 +492,10 @@ def _architecture_from_sm(sm_version: int) -> str:
     return _SM_ARCHITECTURE.get(sm_version, f"sm_{sm_version}")
 
 
-# Cache of system_id -> vendor device name, populated at startup
+# Cache of system_id -> vendor device name, populated at startup from the
+# aiconfigurator SDK (via configiq.systems). aicostings loads the same map from
+# the same source so the two services never drift on GPU naming.
 _DEVICE_DISPLAY_NAMES: dict[str, str] = {}
-
-
-def _load_device_names_from_perf_data() -> dict[str, str]:
-    """Load vendor device names from collector parquet files at startup.
-
-    Reads the `device` column (from torch.cuda.get_device_name()) from existing
-    perf data to get canonical vendor strings like "NVIDIA A100-SXM4-80GB" or
-    "Intel(R) Arc(TM) Pro B60 Graphics". Called once at API startup.
-    """
-    from aiconfigurator_core.sdk.perf_database import get_systems_paths
-
-    device_names = {}
-    try:
-        import pyarrow.parquet as pq
-    except ImportError:
-        logger.warning("pyarrow not available; device display names unavailable")
-        return device_names
-
-    for systems_root in get_systems_paths():
-        data_dir = Path(systems_root) / "data"
-        if not data_dir.exists():
-            continue
-
-        for sys_dir in data_dir.iterdir():
-            if not sys_dir.is_dir():
-                continue
-            sys_id = sys_dir.name
-            if sys_id in device_names:
-                continue
-
-            # Read device name from first available parquet file
-            for parquet_file in sys_dir.rglob("*_perf.parquet"):
-                try:
-                    table = pq.read_table(parquet_file, columns=["device"])
-                    if len(table) > 0:
-                        device_names[sys_id] = table.column("device")[0].as_py()
-                        break
-                except Exception:
-                    logger.debug("could not read device name from %s", parquet_file)
-                    continue
-
-    logger.info("Loaded %d device display names from perf data", len(device_names))
-    return device_names
-
-
-def _system_display_name(system_id: str) -> str:
-    """Get human-readable GPU vendor name from pre-loaded cache."""
-    return _DEVICE_DISPLAY_NAMES.get(system_id, system_id)
 
 
 def _parse_include(include: str | None) -> set[str]:
@@ -569,66 +513,11 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
-# Initialize OpenTelemetry if available
-if _OTEL_AVAILABLE:
-    init_otel_tracing()
-    init_otel_metrics()
-    init_metrics()
-
-
-# ─── Metrics Middleware ──────────────────────────────────────────────────────
-
-class MetricsMiddleware(BaseHTTPMiddleware):
-    """Middleware to collect HTTP request metrics."""
-
-    async def dispatch(self, request: Request, call_next):
-        if not _OTEL_AVAILABLE or not record_http_request:
-            return await call_next(request)
-
-        start_time = time.time()
-
-        # Get request size from Content-Length header
-        content_length = request.headers.get('content-length', '0')
-        request_bytes = int(content_length) if content_length.isdigit() else 0
-
-        # Process request
-        response = await call_next(request)
-
-        # Calculate duration
-        duration = time.time() - start_time
-
-        # Get endpoint route template (not raw path) to avoid cardinality explosion
-        # For /systems/{id}/foo, this returns "/systems/{id}/foo", not "/systems/123/foo"
-        endpoint = request.url.path
-        if hasattr(request, 'scope') and request.scope.get('route'):
-            route = request.scope['route']
-            if hasattr(route, 'path'):
-                endpoint = route.path
-        # Fallback for unmatched routes (404s): use raw path but limit cardinality
-        elif response.status_code == 404:
-            endpoint = "<unmatched>"
-
-        # Get response size (if available)
-        response_bytes = 0
-        if hasattr(response, 'body') and response.body:
-            response_bytes = len(response.body)
-        elif 'content-length' in response.headers:
-            response_bytes = int(response.headers['content-length'])
-
-        # Record metrics
-        record_http_request(
-            method=request.method,
-            endpoint=endpoint,
-            status_code=response.status_code,
-            request_bytes=request_bytes,
-            response_bytes=response_bytes,
-            duration=duration
-        )
-
-        return response
-
-
-app.add_middleware(MetricsMiddleware)
+# Initialize OpenTelemetry (tracing + metrics + HTTP middleware) if the optional
+# extra is present.
+if _OBS:
+    observability.enable(app, service_name="aiconfigurator", service_version="1.0.0",
+                         meter_name="aiconfigurator.api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -637,25 +526,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize MCP server if available
-# MCP exposes our API as tools for MCP-compatible clients
-# fastapi-mcp automatically exposes FastAPI endpoints as MCP tools
-if _MCP_AVAILABLE:
-    mcp = FastApiMCP(
-        app,
-        name="aiconfigurator",
-        description="GPU recommendation and performance estimation for LLM inference",
-    )
-    logger.info("MCP server initialized - SSE endpoint at /mcp")
+# Expose the API as MCP tools if the optional extra is present.
+if _MCP:
+    mcp_support.mount(app, name="aiconfigurator",
+                      description="GPU recommendation and performance estimation for LLM inference")
 else:
-    logger.info("MCP server unavailable (install with: pip install 'aiconfigurator[service]')")
+    logger.info("MCP server unavailable (install with: pip install '.[mcp]')")
 
 
 @app.on_event("startup")
 def startup_event():
-    """Load device display names from perf data at startup."""
+    """Load GPU display names from the aiconfigurator SDK at startup."""
     global _DEVICE_DISPLAY_NAMES
-    _DEVICE_DISPLAY_NAMES = _load_device_names_from_perf_data()
+    _DEVICE_DISPLAY_NAMES = load_device_names_from_perf_data()
 
 
 @app.post("/recommend")
@@ -904,10 +787,10 @@ def get_systems(
     want_specs = "specs" in includes
 
     systems = []
-    for sys_id in sorted(SupportedSystems):
+    for sys_id in sorted(supported_systems()):
         entry: dict[str, Any] = {
             "id": sys_id,
-            "name": _system_display_name(sys_id),
+            "name": _DEVICE_DISPLAY_NAMES.get(sys_id, sys_id),
         }
         if want_specs:
             try:
@@ -932,44 +815,17 @@ def get_systems(
 
 @app.get("/metrics")
 def get_metrics(request: Request):
-    """Expose metrics in Prometheus or OTLP JSON format based on Accept header.
+    """Expose metrics in Prometheus or OTLP JSON format via content negotiation.
 
-    Supports content negotiation:
-    - Accept: text/plain → Prometheus/OpenMetrics text format
-    - Accept: application/json → OTLP JSON format (for pmdaopentelemetry)
-
-    Default (no Accept header): Prometheus text format
+    - Accept: application/json → OTLP JSON (for pmdaopentelemetry and similar)
+    - anything else (default)  → Prometheus/OpenMetrics text
     """
-    if not _OTEL_AVAILABLE or not _PROMETHEUS_AVAILABLE:
+    if not _OBS:
         raise HTTPException(
             status_code=503,
-            detail="Metrics unavailable (install with: pip install 'aiconfigurator[service]')"
+            detail="Metrics unavailable (install with: pip install '.[otel]')",
         )
-
-    # Get Accept header for content negotiation
-    accept = request.headers.get("accept", "text/plain").lower()
-
-    # OTLP JSON format
-    if "application/json" in accept:
-        otlp_data = get_otlp_metrics()
-        if not otlp_data:
-            raise HTTPException(
-                status_code=503,
-                detail="OTLP metrics reader not initialized"
-            )
-        return otlp_data
-
-    # Prometheus text format (default)
-    from prometheus_client import REGISTRY, generate_latest
-
-    # Note: OpenTelemetry metrics are in-memory per-worker, not aggregated across
-    # multiple uvicorn workers. For production multi-worker deployments, use a
-    # separate metrics aggregator or scrape each worker individually.
-    metrics_output = generate_latest(REGISTRY)
-    return Response(
-        content=metrics_output,
-        media_type="text/plain; version=0.0.4; charset=utf-8"
-    )
+    return observability.metrics_response(request.headers.get("accept", "text/plain"))
 
 
 # ─── Entrypoint ──────────────────────────────────────────────────────────────

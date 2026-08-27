@@ -495,7 +495,7 @@ class TestModels:
 
 class TestSystems:
 
-    @patch("tools.api_service.app.SupportedSystems", {"h200_sxm", "a100_sxm"})
+    @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm", "a100_sxm"})
     def test_returns_sorted_objects(self):
         resp = client.get("/systems")
         assert resp.status_code == 200
@@ -507,7 +507,7 @@ class TestSystems:
         assert "vendor" not in systems[0]
 
     @patch("tools.api_service.app.load_system_spec")
-    @patch("tools.api_service.app.SupportedSystems", {"h200_sxm"})
+    @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_include_specs(self, mock_spec):
         mock_spec.return_value = MOCK_SYSTEM_SPEC
         resp = client.get("/systems?include=specs")
@@ -522,7 +522,7 @@ class TestSystems:
         assert sys["gpus_per_node"] == 8
 
     @patch("tools.api_service.app.load_system_spec")
-    @patch("tools.api_service.app.SupportedSystems", {"h200_sxm"})
+    @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_include_specs_bandwidth_and_tflops(self, mock_spec):
         mock_spec.return_value = MOCK_SYSTEM_SPEC
         resp = client.get("/systems?include=specs")
@@ -530,7 +530,7 @@ class TestSystems:
         assert sys["memory_bandwidth_bytes"] == 4800000000000
         assert abs(sys["bf16_tflops"] - 989.0) < 0.1
 
-    @patch("tools.api_service.app.SupportedSystems", {"h200_sxm"})
+    @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_no_include_omits_specs(self):
         resp = client.get("/systems")
         sys = resp.json()["systems"][0]
@@ -538,7 +538,7 @@ class TestSystems:
         assert "memory_bytes" not in sys
 
     @patch("tools.api_service.app.load_system_spec")
-    @patch("tools.api_service.app.SupportedSystems", {"h200_sxm"})
+    @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_spec_failure_still_returns_entry(self, mock_spec):
         mock_spec.side_effect = FileNotFoundError("missing yaml")
         resp = client.get("/systems?include=specs")
@@ -863,16 +863,16 @@ class TestOpenTelemetry:
         resp = client.get("/systems")
         assert resp.status_code == 200
 
-    def test_otel_available_flag_set_correctly(self):
-        """Verify _OTEL_AVAILABLE flag is set based on import success."""
+    def test_obs_flag_set_correctly(self):
+        """Verify the _OBS flag is set based on configiq[otel] import success."""
         from tools.api_service import app as app_module
 
-        # The flag should be True if otel deps are installed, False otherwise
-        assert isinstance(app_module._OTEL_AVAILABLE, bool)
+        # The flag should be True if the otel extra is installed, False otherwise
+        assert isinstance(app_module._OBS, bool)
 
-        # If available, the module should have been imported
-        if app_module._OTEL_AVAILABLE:
-            assert hasattr(app_module, "init_otel_tracing") or True  # import may be in try block
+        # If available, the shared observability module should have been imported
+        if app_module._OBS:
+            assert hasattr(app_module, "observability")
 
 
 class TestMCPServer:
@@ -887,7 +887,7 @@ class TestMCPServer:
         """MCP SSE endpoint is available when fastapi-mcp is installed."""
         from tools.api_service import app as app_module
 
-        if not app_module._MCP_AVAILABLE:
+        if not app_module._MCP:
             pytest.skip("fastapi-mcp not installed")
 
         # MCP server exposes an SSE endpoint at /mcp for the protocol
@@ -907,13 +907,12 @@ class TestMCPServer:
         """MCP tools are properly registered when MCP is available."""
         from tools.api_service import app as app_module
 
-        if not app_module._MCP_AVAILABLE:
+        if not app_module._MCP:
             pytest.skip("fastapi-mcp not installed")
 
-        # Verify the MCP tools are registered by checking the mcp instance
-        # The exact introspection method depends on fastapi-mcp's API
-        # For now, verify the app initialized successfully with MCP
-        assert hasattr(app_module, "mcp") or not app_module._MCP_AVAILABLE
+        # Verify MCP wiring is present: the shared mount helper was imported.
+        # For now, verify the app initialized successfully with MCP.
+        assert hasattr(app_module, "mcp_support") or not app_module._MCP
 
 
 class TestMetrics:
@@ -923,8 +922,8 @@ class TestMetrics:
         """Metrics endpoint returns 503 when OpenTelemetry not installed."""
         from tools.api_service import app as app_module
 
-        if app_module._OTEL_AVAILABLE and app_module._PROMETHEUS_AVAILABLE:
-            pytest.skip("OTel and Prometheus are installed")
+        if app_module._OBS:
+            pytest.skip("the otel extra is installed")
 
         resp = client.get("/metrics")
         assert resp.status_code == 503
@@ -934,8 +933,8 @@ class TestMetrics:
         """Metrics endpoint returns Prometheus text format by default."""
         from tools.api_service import app as app_module
 
-        if not (app_module._OTEL_AVAILABLE and app_module._PROMETHEUS_AVAILABLE):
-            pytest.skip("OTel or Prometheus not installed")
+        if not app_module._OBS:
+            pytest.skip("the otel extra is not installed")
 
         resp = client.get("/metrics")
         assert resp.status_code == 200
@@ -947,8 +946,8 @@ class TestMetrics:
         """Metrics endpoint returns Prometheus format with text/plain Accept header."""
         from tools.api_service import app as app_module
 
-        if not (app_module._OTEL_AVAILABLE and app_module._PROMETHEUS_AVAILABLE):
-            pytest.skip("OTel or Prometheus not installed")
+        if not app_module._OBS:
+            pytest.skip("the otel extra is not installed")
 
         resp = client.get("/metrics", headers={"Accept": "text/plain"})
         assert resp.status_code == 200
@@ -958,8 +957,8 @@ class TestMetrics:
         """Metrics endpoint returns OTLP JSON format with worker identification."""
         from tools.api_service import app as app_module
 
-        if not (app_module._OTEL_AVAILABLE and app_module._PROMETHEUS_AVAILABLE):
-            pytest.skip("OTel or Prometheus not installed")
+        if not app_module._OBS:
+            pytest.skip("the otel extra is not installed")
 
         # Make a request to generate some metrics
         client.get("/systems")
