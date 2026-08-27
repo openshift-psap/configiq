@@ -30,7 +30,9 @@ class TestModels:
         assert store.get_models() is None
 
     def test_marks_scrape_time(self, store: ValkeyStore):
-        store.set_models([])
+        # Scrape time is recorded by _mark_scrape (called by the scrape jobs
+        # after a successful set_*), not by the setters themselves.
+        store._mark_scrape("models")
         times = store.get_scrape_times()
         assert "models" in times
 
@@ -88,7 +90,7 @@ class TestStaleness:
         assert store.is_stale("models", 3600) is True
 
     def test_not_stale_after_scrape(self, store: ValkeyStore):
-        store.set_models([])
+        store._mark_scrape("models")
         assert store.is_stale("models", 3600) is False
 
     def test_is_empty(self, store: ValkeyStore):

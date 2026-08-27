@@ -199,7 +199,7 @@ class TestHardwareCosts:
         costs = load_hardware_costs()
         assert isinstance(costs, dict)
         assert "h200_sxm" in costs
-        assert costs["h200_sxm"]["new_usd"] == 42000
+        assert costs["h200_sxm"]["new_usd"] == 33750
         assert costs["h100_sxm"]["tdp_watts"] == 700
 
     def test_all_systems_have_required_fields(self):

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# CI only reads the checked-out source; no write scopes needed.
+permissions:
+  contents: read
+
 # No path filters on any job: every push/PR checks all three components, matching
 # the "release in unison" model of the build workflow.
 jobs:
