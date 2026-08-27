@@ -1,0 +1,56 @@
+# AICostings FastAPI service — GPU and LLM pricing API.
+#
+# Build context is services/ (not this directory) so the image can pull in the
+# shared configiq-py package alongside this service. Build from the repo root:
+#
+#   podman build -f services/aicostings/Containerfile -t aicostings services/
+#
+# Pure-Python service, but it sources the GPU system catalog + display names from
+# the aiconfigurator SDK (via configiq.systems), so it installs those wheels too.
+
+FROM registry.access.redhat.com/ubi9/python-311:latest
+
+# The UBI python image defaults to USER 1001 in /opt/app-root; run as root only
+# for the install steps, then hand everything back to the arbitrary-UID user.
+USER 0
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# GitHub Release that hosts the aiconfigurator / aiconfigurator-core wheels.
+# Defaults to the rolling "latest" build of the fork's deploy/api branch.
+# Override at build time to pin a specific release, e.g.
+#   --build-arg AIC_WHEELS_URL=.../expanded_assets/deploy-api-v0.11.0+ce6a0fff
+ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest
+
+# Shared ConfigIQ library, with the observability + MCP extras so /metrics,
+# tracing, and the MCP server light up in the deployed container.
+COPY configiq-py /src/configiq-py
+RUN pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
+
+# Service runtime deps, incl. the aiconfigurator SDK wheels from the RH fork
+# (source of the GPU system catalog + vendor display names via configiq.systems;
+# pyarrow reads the SDK's bundled perf-data parquet for those names).
+RUN pip install --no-cache-dir --find-links "${AIC_WHEELS_URL}" \
+        fastapi "uvicorn[standard]" pydantic aiohttp valkey apscheduler pyyaml orjson \
+        aiconfigurator aiconfigurator-core pyarrow
+
+# Service source. The app reads bundled YAML from data/ and uses relative
+# imports, so it runs from the source tree at /app (python -m tools.api_service.app).
+COPY aicostings /app
+
+# OpenShift / rootless compatibility: numeric UID 1001, group 0 (root group),
+# group-writable so an arbitrary assigned UID can still write.
+RUN chown -R 1001:0 /app \
+    && chmod -R g=u /app
+
+USER 1001
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)" || exit 1
+
+CMD ["python", "-m", "tools.api_service.app"]

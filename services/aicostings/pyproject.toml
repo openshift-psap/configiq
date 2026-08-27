@@ -1,0 +1,70 @@
+[project]
+name = "aicostings"
+version = "0.1.0"
+description = "GPU and LLM pricing API for AI infrastructure cost modelling"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.0",
+    "aiohttp>=3.10",
+    "valkey>=6.0",
+    "apscheduler>=3.10",
+    "pyyaml>=6.0",
+    "orjson>=3.10",
+    # Shared ConfigIQ utilities (systems catalog, observability, MCP wiring).
+    "configiq",
+    # GPU system catalog + vendor display names come from the aiconfigurator SDK
+    # (via configiq.systems) so aicostings and aiconfigurator never drift. The
+    # SDK + its Rust-compiled core are consumed as wheels from the Red Hat fork
+    # (see [tool.uv] find-links below and the Containerfile); pyarrow reads the
+    # SDK's bundled perf-data parquet for the display names.
+    "aiconfigurator",
+    "aiconfigurator-core",
+    "pyarrow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.8",
+]
+
+# Opt-in observability + MCP, both provided by the shared configiq package. Kept
+# out of the base install (and enabled explicitly in the container) because otel
+# tracing initializes an OTLP exporter eagerly at import; the app's guarded
+# imports light up /metrics, tracing, and the MCP server only when present.
+otel = ["configiq[otel]"]
+mcp = ["configiq[mcp]"]
+
+# configiq is developed in-tree as a path dependency so local edits are picked up
+# without reinstalling. The container build (context = services/) installs it
+# from ./configiq-py before this service.
+[tool.uv.sources]
+configiq = { path = "../configiq-py", editable = true }
+
+# The aiconfigurator SDK wheels are published as GitHub Release assets by the
+# Red Hat fork, not on PyPI. Platform availability (currently manylinux x86_64
+# only) is dictated by that upstream, not enforced here.
+[tool.uv]
+find-links = [
+    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Blind `except Exception` is deliberate here: per-provider scrapers degrade
+# gracefully (one failing provider must not abort the batch) and the psutil
+# metric callbacks are strictly best-effort.
+ignore = ["BLE001"]

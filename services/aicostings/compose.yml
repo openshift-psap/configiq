@@ -1,0 +1,18 @@
+services:
+  valkey:
+    image: registry.redhat.io/rhel9/valkey-8
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      # Context is the parent services/ dir so the build can pull in the shared
+      # configiq-py package alongside this service.
+      context: ..
+      dockerfile: aicostings/Containerfile
+    ports:
+      - "8080:8080"
+    environment:
+      VALKEY_URL: valkey://valkey:6379/0
+    depends_on:
+      - valkey
