@@ -25,8 +25,13 @@ Full spec: [`docs/api/openapi.yaml`](docs/api/openapi.yaml).
 The SDK's `aiconfigurator-core` wheel currently ships only for `linux/amd64`
 (manylinux x86_64), so the container is the portable way to run this service:
 
+The build context is `services/` (not this directory) so the image can pull in
+the shared `configiq-py` package; pass the Containerfile with `-f`. The SDK
+wheel is amd64-only, so build for `linux/amd64` (emulated on Apple Silicon):
+
 ```bash
-docker build -t aiconfigurator services/aiconfigurator
+docker build --platform linux/amd64 \
+  -f services/aiconfigurator/Containerfile -t aiconfigurator services/
 docker run --rm -p 7860:7860 aiconfigurator
 curl http://localhost:7860/systems
 ```
@@ -35,9 +40,10 @@ By default the image installs the latest SDK wheels from the fork's rolling
 `deploy-api-latest` release. Pin a specific build with:
 
 ```bash
-docker build -t aiconfigurator \
+docker build --platform linux/amd64 \
+  -f services/aiconfigurator/Containerfile -t aiconfigurator \
   --build-arg AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+<sha> \
-  services/aiconfigurator
+  services/
 ```
 
 ## Local development

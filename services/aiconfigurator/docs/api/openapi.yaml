@@ -16,9 +16,11 @@ servers:
 
 tags:
   - name: sizing
-    description: GPU recommendation and memory estimation
+    description: GPU recommendation, performance estimation, and memory estimation
   - name: catalog
     description: Supported models and GPU systems
+  - name: observability
+    description: Service metrics
 
 # ─── Paths ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,60 @@ paths:
                 $ref: '#/components/schemas/RecommendResponse'
         '422':
           description: No feasible configuration found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /estimate:
+    post:
+      operationId: estimate
+      tags: [sizing]
+      summary: Single-point performance estimate for a given parallelism configuration
+      description: |
+        Given a model, GPU system, backend, and explicit parallelism settings
+        (TP/PP/batch_size), returns predicted TTFT, TPOT, throughput, and memory.
+
+        Use this when you know your deployment configuration and want to predict
+        its performance. Use `/recommend` when you want to find the optimal config.
+
+        Wraps `cli_estimate()` from the aiconfigurator SDK.
+
+        Use the `include` query parameter to enrich the result with optional
+        detail sections:
+        - `config` — serving configuration (vLLM/SGLang parameters)
+        - `memory` — per-component memory breakdown
+
+        Example: `POST /estimate?include=config,memory`
+      parameters:
+        - name: include
+          in: query
+          required: false
+          description: Comma-separated list of optional sections to include (config, memory).
+          schema:
+            type: string
+            example: "config,memory"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstimateRequest'
+      responses:
+        '200':
+          description: Performance estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstimateResponse'
+        '422':
+          description: Unsupported model/backend/system combination
           content:
             application/json:
               schema:
@@ -164,6 +220,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemListResponse'
 
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [observability]
+      summary: Expose service metrics via content negotiation
+      description: |
+        Returns service metrics, using the `Accept` request header to select the format:
+        - `Accept: application/json` → OTLP JSON (for pmdaopentelemetry and similar).
+        - anything else (default) → Prometheus/OpenMetrics text.
+
+        Only available when the optional observability extra is installed
+        (`pip install '.[otel]'`); otherwise returns 503.
+      responses:
+        '200':
+          description: Metrics payload
+          content:
+            text/plain:
+              schema:
+                type: string
+                description: Prometheus/OpenMetrics text exposition.
+            application/json:
+              schema:
+                type: object
+                description: OTLP JSON metrics payload.
+        '503':
+          description: Metrics unavailable (observability extra not installed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 # ─── Schemas ────────────────────────────────────────────────────────────────
 
 components:
@@ -239,10 +326,15 @@ components:
           default: 5
           minimum: 1
           maximum: 20
+        model_config:
+          type: object
+          nullable: true
+          description: Pre-fetched HuggingFace model config.json. Skips the HF download when supplied.
+          default: null
 
     RecommendResponse:
       type: object
-      required: [configs]
+      required: [configs, chosen_mode]
       properties:
         configs:
           type: array
@@ -371,6 +463,77 @@ components:
           description: Per-component memory breakdown (present when include=memory).
           $ref: '#/components/schemas/MemoryBreakdown'
 
+        # Disaggregated detail (present for disagg results)
+        prefill_config:
+          nullable: true
+          description: Prefill worker parallelism and serving config (disaggregated results only).
+          $ref: '#/components/schemas/WorkerConfig'
+        decode_config:
+          nullable: true
+          description: Decode worker parallelism and serving config (disaggregated results only).
+          $ref: '#/components/schemas/WorkerConfig'
+
+    WorkerConfig:
+      type: object
+      description: Parallelism and serving config for one worker role in a disaggregated deployment.
+      properties:
+        tp:
+          type: integer
+          nullable: true
+          description: Tensor parallel size.
+        pp:
+          type: integer
+          nullable: true
+          description: Pipeline parallel size.
+        dp:
+          type: integer
+          nullable: true
+          description: Data parallel size.
+        moe_tp:
+          type: integer
+          nullable: true
+          description: MoE tensor parallel size.
+        moe_ep:
+          type: integer
+          nullable: true
+          description: MoE expert parallel size.
+        num_workers:
+          type: integer
+          nullable: true
+          description: Number of workers for this role.
+        memory_gb:
+          type: number
+          nullable: true
+          description: Memory usage (GB).
+        gemm:
+          type: string
+          nullable: true
+          description: GEMM quantization mode.
+        kvcache:
+          type: string
+          nullable: true
+          description: KV cache quantization mode.
+        fmha:
+          type: string
+          nullable: true
+          description: FMHA quantization mode.
+        moe:
+          type: string
+          nullable: true
+          description: MoE quantization mode.
+        comm:
+          type: string
+          nullable: true
+          description: Communication quantization mode.
+        backend_version:
+          type: string
+          nullable: true
+          description: Backend version used.
+        memory_breakdown:
+          nullable: true
+          description: Per-component memory breakdown (present when include=memory).
+          $ref: '#/components/schemas/MemoryBreakdown'
+
     ServingConfig:
       type: object
       description: Backend-specific serving parameters for the recommended configuration.
@@ -397,11 +560,176 @@ components:
           type: string
           description: Quantization mode (fp8, int8, auto, etc).
 
+    # ── Estimate ───────────────────────────────────────────────────────────
+
+    EstimateRequest:
+      type: object
+      required: [model_path, system]
+      properties:
+        model_path:
+          type: string
+          description: HuggingFace model path or SDK model key.
+          example: Qwen/Qwen3-32B
+        system:
+          type: string
+          description: GPU system identifier.
+          example: h200_sxm
+        backend:
+          type: string
+          description: Inference backend.
+          enum: [vllm, sglang, trtllm]
+          default: vllm
+        backend_version:
+          type: string
+          nullable: true
+          description: Backend version. Null uses the latest available.
+          default: null
+        isl:
+          type: integer
+          description: Input sequence length (tokens).
+          default: 4000
+        osl:
+          type: integer
+          description: Output sequence length (tokens).
+          default: 1000
+        tp_size:
+          type: integer
+          description: Tensor parallel size.
+          default: 1
+        pp_size:
+          type: integer
+          description: Pipeline parallel size.
+          default: 1
+        batch_size:
+          type: integer
+          description: Batch size (max concurrent requests).
+          default: 128
+        database_mode:
+          type: string
+          description: Performance database mode.
+          enum: [HYBRID, SILICON, EMPIRICAL, SOL]
+          default: HYBRID
+        gemm_quant_mode:
+          type: string
+          nullable: true
+          default: null
+        kvcache_quant_mode:
+          type: string
+          nullable: true
+          default: null
+        fmha_quant_mode:
+          type: string
+          nullable: true
+          default: null
+        moe_tp_size:
+          type: integer
+          nullable: true
+          default: null
+        moe_ep_size:
+          type: integer
+          nullable: true
+          default: null
+        attention_dp_size:
+          type: integer
+          default: 1
+        inclusive_tpot:
+          type: boolean
+          description: |
+            Report TPOT as (ttft + tpot * (osl - 1)) / osl, spreading TTFT across all
+            output tokens. Useful for comparing with benchmarks that report inclusive
+            TPOT (e.g. GuideLLM).
+          default: false
+        model_config:
+          type: object
+          nullable: true
+          description: Pre-fetched HuggingFace model config.json. Skips the HF download when supplied.
+          default: null
+
+    EstimateResponse:
+      type: object
+      required: [ttft, tpot]
+      description: Single-point performance estimate for a given parallelism configuration.
+      properties:
+        ttft:
+          type: number
+          description: Predicted TTFT (ms).
+        tpot:
+          type: number
+          description: Predicted TPOT (ms).
+        request_latency:
+          type: number
+          nullable: true
+          description: Predicted end-to-end request latency (ms).
+        tokens_per_second:
+          type: number
+          nullable: true
+          description: Total tokens/s.
+        tokens_per_second_per_gpu:
+          type: number
+          nullable: true
+          description: Tokens/s per GPU.
+        tokens_per_second_per_user:
+          type: number
+          nullable: true
+          description: Tokens/s per concurrent user.
+        memory:
+          type: number
+          nullable: true
+          description: Memory usage (GB).
+        concurrency:
+          type: integer
+          nullable: true
+          description: Concurrency level (batch size) at which these metrics hold.
+        tp:
+          type: integer
+          nullable: true
+          description: Tensor parallel size.
+        pp:
+          type: integer
+          nullable: true
+          description: Pipeline parallel size.
+        dp:
+          type: integer
+          nullable: true
+          description: Data parallel size.
+        system:
+          type: string
+          nullable: true
+          description: GPU system used.
+        backend:
+          type: string
+          nullable: true
+          description: Backend used.
+        backend_version:
+          type: string
+          nullable: true
+          description: Backend version used.
+        gemm:
+          type: string
+          nullable: true
+          description: GEMM quantization mode.
+        kvcache:
+          type: string
+          nullable: true
+          description: KV cache quantization mode.
+        power_w:
+          type: number
+          nullable: true
+          description: Estimated power draw (watts).
+        serving_config:
+          nullable: true
+          description: Serving configuration (present when include=config).
+          $ref: '#/components/schemas/ServingConfig'
+        memory_breakdown:
+          nullable: true
+          description: Per-component memory breakdown (present when include=memory).
+          $ref: '#/components/schemas/MemoryBreakdown'
+
     # ── Memory ─────────────────────────────────────────────────────────────
 
     MemoryRequest:
       type: object
-      required: [model_path, system, backend]
+      required: [model_path, system]
       properties:
         model_path:
           type: string
@@ -482,6 +810,11 @@ components:
           type: number
           nullable: true
           description: Safety margin [0.0, 1.0). Reduces KV budget by this fraction.
+          default: null
+        model_config:
+          type: object
+          nullable: true
+          description: Pre-fetched HuggingFace model config.json. Skips the HF download when supplied.
           default: null
 
     MemoryResponse:

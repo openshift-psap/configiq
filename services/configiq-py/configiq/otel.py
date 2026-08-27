@@ -43,15 +43,22 @@ def _resource(service_name: str, service_version: str) -> Resource:
     })
 
 
-def init_tracing(service_name: str, service_version: str) -> None:
-    """Initialize OpenTelemetry tracing with an OTLP HTTP exporter."""
+def init_tracing(app, service_name: str, service_version: str) -> None:
+    """Initialize OpenTelemetry tracing with an OTLP HTTP exporter.
+
+    `app` is the FastAPI/Starlette instance to instrument. Instrumenting the
+    existing app requires `instrument_app(app)`; the argument-less
+    `FastAPIInstrumentor().instrument()` only patches apps created afterwards,
+    so an app already constructed (as it always is by the time `enable()` runs)
+    would emit no server spans.
+    """
     otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 
     tracer_provider = TracerProvider(resource=_resource(service_name, service_version))
     trace.set_tracer_provider(tracer_provider)
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otel_endpoint)))
 
-    FastAPIInstrumentor().instrument()
+    FastAPIInstrumentor.instrument_app(app)
     RequestsInstrumentor().instrument()
     URLLib3Instrumentor().instrument()
 

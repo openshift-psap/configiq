@@ -3,6 +3,11 @@ services:
     image: registry.redhat.io/rhel9/valkey-8
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -15,4 +20,5 @@ services:
     environment:
       VALKEY_URL: valkey://valkey:6379/0
     depends_on:
-      - valkey
+      valkey:
+        condition: service_healthy

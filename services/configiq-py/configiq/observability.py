@@ -27,7 +27,7 @@ get_meter = _metrics.get_meter
 
 def enable(app, *, service_name: str, service_version: str, meter_name: str) -> None:
     """Initialize tracing + metrics and attach the metrics middleware to `app`."""
-    _otel.init_tracing(service_name, service_version)
+    _otel.init_tracing(app, service_name, service_version)
     _otel.init_metrics(service_name, service_version)
     _metrics.init_http_metrics(meter_name)
     app.add_middleware(_metrics.MetricsMiddleware)
@@ -41,6 +41,11 @@ def metrics_response(accept: str) -> Response:
 
     Returns a 503 response if the requested format is not yet available.
     """
+    # If enable() never ran, the global Prometheus REGISTRY holds no app metrics;
+    # rendering it would return a misleading 200 with empty/foreign metrics.
+    if _otel.get_meter_provider() is None:
+        return JSONResponse({"detail": "Metrics reader not initialized"}, status_code=503)
+
     if "application/json" in (accept or "").lower():
         otlp_data = _otel.get_otlp_metrics()
         if not otlp_data:

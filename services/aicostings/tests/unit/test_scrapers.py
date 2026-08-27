@@ -10,8 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tools.api_service.scrapers.cloud_rates import (
+    _aws_gpu_instance_types,
     _merge_records,
+    active_scrapers,
     load_gpu_id_mapping,
+    scrape_vastai,
 )
 from tools.api_service.scrapers.hardware_costs import load_hardware_costs
 from tools.api_service.scrapers.models import (
@@ -117,7 +120,9 @@ class TestFetchOpenRouterModels:
             assert m["price_per_m_input"] > 0
 
     @pytest.mark.asyncio
-    async def test_handles_api_error(self):
+    async def test_raises_on_api_error(self):
+        # A non-200 must propagate so scrape_all_models records the source as
+        # errored rather than as a successful empty scrape.
         mock_response = MagicMock()
         mock_response.status = 500
 
@@ -128,8 +133,8 @@ class TestFetchOpenRouterModels:
         mock_session = MagicMock()
         mock_session.get = mock_get
 
-        models = await fetch_openrouter_models(mock_session)
-        assert models == []
+        with pytest.raises(RuntimeError):
+            await fetch_openrouter_models(mock_session)
 
 
 class TestScrapeAllModels:
@@ -148,6 +153,7 @@ class TestScrapeAllModels:
 
         with (
             patch("tools.api_service.scrapers.models.fetch_openrouter_models", return_value=openrouter_models),
+            patch("tools.api_service.scrapers.models.fetch_litellm_models", return_value=[]),
             patch("tools.api_service.scrapers.models.load_curated_overrides", return_value=overrides),
         ):
             mock_session = AsyncMock()
@@ -189,6 +195,79 @@ class TestGpuIdMapping:
         assert isinstance(mapping, dict)
         assert len(mapping) > 0
         assert any("H100" in k for k in mapping)
+
+
+class TestAwsInstanceTypes:
+    def test_extracts_only_aws_instance_types(self):
+        mapping = {
+            "p5.48xlarge": "h100_sxm",
+            "H100 SXM": "h100_sxm",
+            "p4d.24xlarge": "a100_sxm",
+            "A100 80GB": "a100_sxm",
+        }
+        assert _aws_gpu_instance_types(mapping) == {"p5.48xlarge", "p4d.24xlarge"}
+
+
+_KEY_VARS = ["RUNPOD_API_KEY", "LAMBDA_API_KEY", "GCP_BILLING_API_KEY",
+             "SCALEWAY_SECRET_KEY", "IBMCLOUD_API_KEY"]
+
+
+class TestActiveScrapers:
+    def test_credential_free_always_active(self, monkeypatch):
+        for var in _KEY_VARS:
+            monkeypatch.delenv(var, raising=False)
+        names = [name for name, _ in active_scrapers()]
+        assert names == ["azure", "aws", "vastai"]
+
+    def test_key_activates_provider(self, monkeypatch):
+        for var in _KEY_VARS:
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("RUNPOD_API_KEY", "test-key")
+        names = [name for name, _ in active_scrapers()]
+        assert "runpod" in names
+        assert "lambda" not in names  # its key is still unset
+
+
+class TestScrapeVastai:
+    @pytest.mark.asyncio
+    async def test_medians_per_gpu(self):
+        offers = {"offers": [
+            {"gpu_name": "H100 SXM", "num_gpus": 8, "dph_total": 16.0},   # 2.0/GPU
+            {"gpu_name": "H100 SXM", "num_gpus": 4, "dph_total": 12.0},   # 3.0/GPU
+            {"gpu_name": "Totally Unknown GPU", "num_gpus": 1, "dph_total": 1.0},  # unmapped
+        ]}
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value=offers)
+
+        @asynccontextmanager
+        async def mock_get(*args, **kwargs):
+            yield mock_response
+
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+
+        records = await scrape_vastai(mock_session, {"H100 SXM": "h100_sxm"})
+        assert len(records) == 1
+        rec = records[0]
+        assert rec["system_id"] == "h100_sxm"
+        assert rec["on_demand"] is None
+        assert rec["spot_median"] == 2.5  # median(2.0, 3.0)
+
+    @pytest.mark.asyncio
+    async def test_raises_on_api_error(self):
+        mock_response = MagicMock()
+        mock_response.status = 503
+
+        @asynccontextmanager
+        async def mock_get(*args, **kwargs):
+            yield mock_response
+
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+
+        with pytest.raises(RuntimeError):
+            await scrape_vastai(mock_session, {"H100 SXM": "h100_sxm"})
 
 
 # ── Hardware costs tests ──────────────────────────────────────────────────────

@@ -62,24 +62,33 @@ podman compose up --build
 
 - **OpenRouter** (`GET https://openrouter.ai/api/v1/models`) — primary
   source; structured pricing for 100+ models.
+- **LiteLLM Catalog** (`GET https://api.litellm.ai/model_catalog`) —
+  secondary source; fills gaps for models missing from OpenRouter.
 - **Curated YAML overrides** (`data/model-overrides.yaml`) — for models
-  not on OpenRouter.
+  missing from both, and to override either.
 
 ### Cloud GPU pricing
 
-| Provider | Method |
-|---|---|
-| AWS | Pricing API |
-| GCP | Cloud Billing Catalog API |
-| Azure | Retail Prices API |
-| IBM Cloud | Global Catalog API |
-| Vast.ai | Public REST API |
-| RunPod | Public GraphQL API |
-| Lambda Labs | REST API |
-| Hetzner | Cloud API |
-| Scaleway | Instances API |
-| CoreWeave | HTML scrape |
-| Nebius | HTML scrape |
+Credential-free providers (Azure, AWS, Vast.ai) run out of the box. The
+remaining providers require a per-provider API key and only run when their
+environment variable is set (see [Configuration](#configuration)) — until then
+they're skipped, so `/health` only ever reports providers actually being
+scraped. Their request/auth is wired but response parsing is **unverified**
+against the live APIs; validate with a real key before trusting output.
+
+| Provider | Method | Status |
+|---|---|---|
+| Azure | Retail Prices API | Implemented (no key) |
+| AWS | Price List bulk JSON (on-demand; spot deferred) | Implemented (no key) |
+| Vast.ai | Public marketplace API (spot-style median) | Implemented (no key) |
+| RunPod | GraphQL API | Key-gated, parsing TODO |
+| Lambda Labs | Cloud API | Key-gated, parsing TODO |
+| GCP | Cloud Billing Catalog API | Key-gated, parsing TODO |
+| Scaleway | Product catalog API | Key-gated, parsing TODO |
+| IBM Cloud | Global Catalog API | Key-gated, parsing TODO |
+
+AWS covers on-demand only; spot pricing needs an AWS account
+(`DescribeSpotPriceHistory`) and is a deliberate follow-up.
 
 ### Hardware purchase costs
 
@@ -92,11 +101,17 @@ podman compose up --build
 | Variable | Default | Description |
 |---|---|---|
 | `VALKEY_URL` | `valkey://localhost:6379/0` | Valkey connection URL |
+| `AWS_PRICING_REGIONS` | `us-east-1,us-west-2` | Comma-separated AWS regions to scrape GPU on-demand prices for |
+| `RUNPOD_API_KEY` | _(unset)_ | Activates the RunPod scraper (parsing TODO) |
+| `LAMBDA_API_KEY` | _(unset)_ | Activates the Lambda Labs scraper (parsing TODO) |
+| `GCP_BILLING_API_KEY` | _(unset)_ | Activates the GCP scraper (parsing TODO) |
+| `SCALEWAY_SECRET_KEY` | _(unset)_ | Activates the Scaleway scraper (parsing TODO) |
+| `IBMCLOUD_API_KEY` | _(unset)_ | Activates the IBM Cloud scraper (parsing TODO) |
 
 ## Architecture
 
 - **FastAPI + Pydantic** — REST API
-- **APScheduler 4.x** — embedded async scheduler
+- **APScheduler 3.x** — embedded async scheduler (`AsyncIOScheduler`)
 - **aiohttp** — concurrent provider fetches
 - **Valkey** — data store with TTL-based staleness
 - **configiq** — shared GPU system catalog, OpenTelemetry wiring, and MCP mount
@@ -119,9 +134,11 @@ read directly from Valkey with no outbound calls at query time.
 
 | Interval | Sources |
 |---|---|
-| 6 hours | Vast.ai, RunPod (spot prices) |
-| 24 hours | All on-demand cloud rates, OpenRouter frontier models |
-| 7 days | Hardware costs (eBay + curated YAML) |
+| 24 hours | Cloud GPU rates, hosted model pricing (OpenRouter + LiteLLM) |
+| 7 days | Hardware costs (curated YAML) |
+
+Data is also loaded at startup for any dataset that is missing or already
+stale, so a restart self-heals rather than waiting for the next tick.
 
 ## API reference
 

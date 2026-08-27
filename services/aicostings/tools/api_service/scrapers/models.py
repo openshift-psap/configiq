@@ -83,15 +83,18 @@ def _parse_openrouter_model(m: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def fetch_openrouter_models(session: aiohttp.ClientSession) -> list[dict[str, Any]]:
+    # Raise on failure (rather than returning []) so scrape_all_models records
+    # this source as errored, not as a successful empty scrape — mirroring
+    # fetch_litellm_models. A silent [] would clear the scrape-error marker and
+    # mark the source healthy while pricing quietly went stale.
     try:
         async with session.get(OPENROUTER_URL, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status != 200:
-                logger.warning("OpenRouter returned %d", resp.status)
-                return []
+                raise RuntimeError(f"OpenRouter returned {resp.status}")
             data = await resp.json()
     except Exception as e:
         logger.error("OpenRouter fetch failed: %s", e)
-        return []
+        raise
 
     raw_models = data.get("data", [])
     parsed = []

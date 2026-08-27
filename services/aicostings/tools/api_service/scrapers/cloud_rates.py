@@ -11,10 +11,13 @@ Provider GPU names are mapped to AIC system IDs via the gpu-id-mapping.
 from __future__ import annotations
 
 import logging
+import os
+import statistics
 from pathlib import Path
 from typing import Any
 
 import aiohttp
+import ijson
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -85,71 +88,267 @@ async def scrape_azure(session: aiohttp.ClientSession, mapping: dict[str, str]) 
     return records
 
 
-# ── Placeholder scrapers (to be implemented per provider) ─────────────────────
+# ── AWS (public Price List bulk JSON, on-demand) ──────────────────────────────
+#
+# Credential-free: the Price List bulk API is public. The per-region EC2 offer
+# file is large (hundreds of MB), so we (a) fetch only the regions in
+# AWS_PRICING_REGIONS and (b) stream-parse with ijson, keeping only the SKUs for
+# GPU instance types we care about. On-demand only — spot needs an AWS account
+# (DescribeSpotPriceHistory), which is a deliberate follow-up.
+
+AWS_PRICING_HOST = "https://pricing.us-east-1.amazonaws.com"
+AWS_REGION_INDEX = f"{AWS_PRICING_HOST}/offers/v1.0/aws/AmazonEC2/current/region_index.json"
+# Default to the two regions where our GPU instance types are most available;
+# override with a comma-separated AWS_PRICING_REGIONS.
+AWS_PRICING_REGIONS = [
+    r.strip() for r in os.environ.get("AWS_PRICING_REGIONS", "us-east-1,us-west-2").split(",") if r.strip()
+]
+
+
+def _aws_gpu_instance_types(mapping: dict[str, str]) -> set[str]:
+    """AWS instance types from the GPU id-mapping (e.g. p5.48xlarge)."""
+    return {name for name in mapping if "xlarge" in name.lower()}
+
+
+async def _aws_region_file_urls(session: aiohttp.ClientSession) -> dict[str, str]:
+    async with session.get(AWS_REGION_INDEX, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"AWS region index returned {resp.status}")
+        index = await resp.json()
+    regions = index.get("regions", {})
+    return {code: AWS_PRICING_HOST + meta["currentVersionUrl"] for code, meta in regions.items()}
+
+
+async def _aws_scrape_region(
+    session: aiohttp.ClientSession, region: str, url: str, want_types: set[str], mapping: dict[str, str],
+) -> list[RateRecord]:
+    """Stream a region's EC2 offer file and extract on-demand GPU instance prices.
+
+    The offer file lists `products.<sku>.attributes` (products first) then
+    `terms.OnDemand.<sku>...pricePerUnit.USD`. We accumulate one product's
+    attributes at a time (they arrive contiguously), keep the SKUs that match a
+    GPU instance type + standard Linux/Shared/Used/NA terms, then pick up their
+    on-demand USD/hr in the same single pass.
+    """
+    matched_skus: dict[str, str] = {}  # sku -> instance_type
+    seen: set[str] = set()             # (system_id, region) already recorded
+    records: list[RateRecord] = []
+    cur_sku: str | None = None
+    cur_attrs: dict[str, str] = {}
+
+    def finalize(sku: str | None, attrs: dict[str, str]) -> None:
+        if not sku:
+            return
+        if (
+            attrs.get("instanceType") in want_types
+            and attrs.get("tenancy") == "Shared"
+            and attrs.get("operatingSystem") == "Linux"
+            and attrs.get("capacitystatus") == "Used"
+            and attrs.get("preInstalledSw") == "NA"
+        ):
+            matched_skus[sku] = attrs["instanceType"]
+
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=600)) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"AWS offer file for {region} returned {resp.status}")
+        async for prefix, event, value in ijson.parse_async(resp.content):
+            if prefix.startswith("products."):
+                parts = prefix.split(".")
+                sku = parts[1] if len(parts) > 1 else None
+                if sku != cur_sku:
+                    finalize(cur_sku, cur_attrs)
+                    cur_sku, cur_attrs = sku, {}
+                if len(parts) == 4 and parts[2] == "attributes" and event == "string":
+                    cur_attrs[parts[3]] = value
+            elif prefix.startswith("terms.OnDemand."):
+                if cur_sku is not None:
+                    finalize(cur_sku, cur_attrs)
+                    cur_sku, cur_attrs = None, {}
+                parts = prefix.split(".")
+                # terms.OnDemand.<sku>.<term>.priceDimensions.<pd>.pricePerUnit.USD
+                if (
+                    len(parts) == 8 and event == "string"
+                    and parts[4] == "priceDimensions" and parts[6] == "pricePerUnit" and parts[7] == "USD"
+                    and parts[2] in matched_skus
+                ):
+                    try:
+                        usd = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if usd <= 0:
+                        continue
+                    system_id = _map_gpu_name(matched_skus[parts[2]], mapping)
+                    if not system_id or (system_id, region) in seen:
+                        continue
+                    seen.add((system_id, region))
+                    records.append({
+                        "system_id": system_id,
+                        "provider_region": f"aws.{region}",
+                        "on_demand": round(usd, 4),
+                        "spot_median": None,
+                    })
+    return records
+
 
 async def scrape_aws(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("AWS scraper: not yet implemented")
-    return []
+    want_types = _aws_gpu_instance_types(mapping)
+    if not want_types:
+        logger.info("AWS: no GPU instance types in the id-mapping; nothing to scrape")
+        return []
+    region_urls = await _aws_region_file_urls(session)
+    records: list[RateRecord] = []
+    for region in AWS_PRICING_REGIONS:
+        url = region_urls.get(region)
+        if not url:
+            logger.warning("AWS: no offer file URL for region %s", region)
+            continue
+        region_records = await _aws_scrape_region(session, region, url, want_types, mapping)
+        records.extend(region_records)
+        logger.info("AWS %s: %d GPU rate records", region, len(region_records))
+    logger.info("AWS: %d rate records across %d region(s)", len(records), len(AWS_PRICING_REGIONS))
+    return records
 
 
-async def scrape_gcp(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("GCP scraper: not yet implemented")
-    return []
+# ── Vast.ai (public marketplace API) ──────────────────────────────────────────
+#
+# Credential-free. Vast is a GPU marketplace, so prices vary per offer; we take
+# the median per-GPU $/hr across current rentable offers and record it as a
+# spot-style rate. NOTE: the response schema below is best-effort and should be
+# validated against the live API.
 
-
-async def scrape_ibmcloud(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("IBM Cloud scraper: not yet implemented")
-    return []
+VASTAI_URL = "https://console.vast.ai/api/v0/bundles/"
 
 
 async def scrape_vastai(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("Vast.ai scraper: not yet implemented")
-    return []
+    import json as _json
+
+    query = {"rentable": {"eq": True}, "rented": {"eq": False}}
+    params = {"q": _json.dumps(query)}
+    async with session.get(VASTAI_URL, params=params, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"Vast.ai returned {resp.status}")
+        data = await resp.json()
+
+    # Group per-GPU $/hr by system so we can report a stable median.
+    per_system: dict[str, list[float]] = {}
+    for offer in data.get("offers", []):
+        gpu_name = offer.get("gpu_name")
+        num_gpus = offer.get("num_gpus") or 0
+        dph_total = offer.get("dph_total")
+        if not gpu_name or not num_gpus or dph_total is None:
+            continue
+        system_id = _map_gpu_name(gpu_name, mapping)
+        if not system_id:
+            continue
+        try:
+            per_gpu = float(dph_total) / int(num_gpus)
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+        if per_gpu > 0:
+            per_system.setdefault(system_id, []).append(per_gpu)
+
+    records: list[RateRecord] = []
+    for system_id, prices in per_system.items():
+        records.append({
+            "system_id": system_id,
+            "provider_region": "vastai.marketplace",
+            "on_demand": None,
+            "spot_median": round(statistics.median(prices), 4),
+        })
+    logger.info("Vast.ai: %d systems priced from %d offers", len(records), len(data.get("offers", [])))
+    return records
+
+
+# ── Key-gated providers ───────────────────────────────────────────────────────
+#
+# These are only invoked when their API key is set (see _SCRAPERS / active_scrapers),
+# so they don't pollute /health when unconfigured. Their auth is wired via the
+# named env var, but the response parsing is UNVERIFIED against the live APIs, so
+# each raises NotImplementedError until it has been implemented and validated with
+# a real key — that surfaces in /health as an error rather than emitting wrong
+# prices.
 
 
 async def scrape_runpod(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("RunPod scraper: not yet implemented")
-    return []
+    """RunPod GPU pricing via the public GraphQL API.
+
+    Auth is wired via RUNPOD_API_KEY; GraphQL response→system parsing is
+    UNVERIFIED. Raises until implemented and tested.
+    """
+    os.environ["RUNPOD_API_KEY"]  # presence already gated; kept explicit
+    raise NotImplementedError("RunPod GraphQL response parsing not yet implemented")
 
 
 async def scrape_lambda(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("Lambda Labs scraper: not yet implemented")
-    return []
+    """Lambda Labs on-demand pricing via the Cloud API.
+
+    Auth is wired via LAMBDA_API_KEY; instance-type response→system parsing is
+    UNVERIFIED. Raises until implemented and tested.
+    """
+    os.environ["LAMBDA_API_KEY"]  # presence already gated; kept explicit
+    raise NotImplementedError("Lambda Labs response parsing not yet implemented")
 
 
-async def scrape_hetzner(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("Hetzner scraper: not yet implemented")
-    return []
+async def scrape_gcp(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
+    """GCP GPU pricing via the Cloud Billing Catalog API.
+
+    Auth (API key) is wired, but mapping GCP's per-SKU catalog descriptions to
+    our GPU system ids is non-trivial and UNVERIFIED. Raises until the SKU→system
+    parsing is implemented and tested, so it surfaces in /health as an error
+    rather than emitting wrong prices.
+    """
+    os.environ["GCP_BILLING_API_KEY"]  # presence already gated; kept explicit
+    raise NotImplementedError("GCP catalog SKU→system parsing not yet implemented")
 
 
 async def scrape_scaleway(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("Scaleway scraper: not yet implemented")
-    return []
+    """Scaleway GPU instance pricing.
+
+    Auth is wired via SCALEWAY_SECRET_KEY; product-catalog→system parsing is
+    UNVERIFIED. Raises until implemented and tested.
+    """
+    os.environ["SCALEWAY_SECRET_KEY"]
+    raise NotImplementedError("Scaleway product-catalog parsing not yet implemented")
 
 
-async def scrape_coreweave(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("CoreWeave scraper: not yet implemented")
-    return []
+async def scrape_ibmcloud(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
+    """IBM Cloud GPU pricing via the Global Catalog API.
+
+    Auth is wired via IBMCLOUD_API_KEY; catalog→system parsing is UNVERIFIED.
+    Raises until implemented and tested.
+    """
+    os.environ["IBMCLOUD_API_KEY"]
+    raise NotImplementedError("IBM Cloud catalog parsing not yet implemented")
 
 
-async def scrape_nebius(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
-    logger.info("Nebius scraper: not yet implemented")
-    return []
-
-
-ALL_SCRAPERS = [
-    ("azure", scrape_azure),
-    ("aws", scrape_aws),
-    ("gcp", scrape_gcp),
-    ("ibmcloud", scrape_ibmcloud),
-    ("vastai", scrape_vastai),
-    ("runpod", scrape_runpod),
-    ("lambda", scrape_lambda),
-    ("hetzner", scrape_hetzner),
-    ("scaleway", scrape_scaleway),
-    ("coreweave", scrape_coreweave),
-    ("nebius", scrape_nebius),
+# Scraper registry. `env` is the API key required to activate the provider (None
+# = credential-free, always active). active_scrapers() filters to the ones whose
+# key is present so /health only ever reports providers actually being scraped.
+_SCRAPERS: list[tuple[str, Any, str | None]] = [
+    ("azure", scrape_azure, None),
+    ("aws", scrape_aws, None),
+    ("vastai", scrape_vastai, None),
+    ("runpod", scrape_runpod, "RUNPOD_API_KEY"),
+    ("lambda", scrape_lambda, "LAMBDA_API_KEY"),
+    ("gcp", scrape_gcp, "GCP_BILLING_API_KEY"),
+    ("scaleway", scrape_scaleway, "SCALEWAY_SECRET_KEY"),
+    ("ibmcloud", scrape_ibmcloud, "IBMCLOUD_API_KEY"),
 ]
+
+
+def active_scrapers() -> list[tuple[str, Any]]:
+    """Credential-free scrapers plus any key-gated ones whose key is set."""
+    active: list[tuple[str, Any]] = []
+    for name, fn, env in _SCRAPERS:
+        if env is None or os.environ.get(env):
+            active.append((name, fn))
+        else:
+            logger.info("Skipping %s scraper: %s not set", name, env)
+    return active
+
+
+# Back-compat alias for callers/tests that referenced the old registry.
+ALL_SCRAPERS = [(name, fn) for name, fn, _ in _SCRAPERS]
 
 
 def _merge_records(records: list[RateRecord]) -> dict[str, dict[str, dict[str, float | None]]]:
@@ -187,13 +386,14 @@ async def scrape_all_cloud_rates(
     import asyncio
 
     mapping = load_gpu_id_mapping()
-    tasks = [scraper(session, mapping) for _, scraper in ALL_SCRAPERS]
+    scrapers = active_scrapers()
+    tasks = [scraper(session, mapping) for _, scraper in scrapers]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_records: list[RateRecord] = []
     errors: dict[str, Exception | None] = {}
 
-    for (name, _), result in zip(ALL_SCRAPERS, results):
+    for (name, _), result in zip(scrapers, results):
         if isinstance(result, Exception):
             logger.error("Scraper %s failed: %s", name, result)
             errors[name] = result

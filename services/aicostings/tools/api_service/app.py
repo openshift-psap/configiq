@@ -149,7 +149,13 @@ async def job_load_hardware_costs() -> None:
             **cost,
             "hardware_updated_at": datetime.now(UTC).isoformat(),
         })
-    # Hardware costs are seed data, not scraped — no scrape timestamp recorded
+    # Hardware costs are loaded from seed data rather than scraped, but still
+    # record a freshness timestamp so /health reports the source (and flags it
+    # stale if the 7-day reload ever stops running).
+    if costs:
+        store._mark_scrape("hardware_costs")
+    else:
+        store.set_scrape_error("hardware_costs", "no hardware cost seed data found")
     logger.info("Loaded hardware costs for %d systems", len(costs))
     record_scrape("hardware_costs", "success" if costs else "error",
                   time.monotonic() - start, records=len(costs))
@@ -166,11 +172,16 @@ async def lifespan(app: FastAPI):
     global _DEVICE_DISPLAY_NAMES
     _DEVICE_DISPLAY_NAMES = load_device_names_from_perf_data()
 
-    # Initial data load
-    if store.is_empty():
-        logger.info("Valkey is empty — running initial scrape")
+    # Initial data load, per dataset. Checking is_empty() alone is not enough:
+    # data keys carry a TTL but the scrape:last:* markers do not, so after a
+    # restart a dataset can be missing (expired) while the DB is non-empty. Load
+    # anything that is absent or already stale so a restart self-heals instead of
+    # serving stale/empty data until the next scheduled tick.
+    if store.get_models() is None or (_stale_flag("models.openrouter") and _stale_flag("models.litellm")):
         await job_scrape_models()
+    if not store.get_all_cloud_rates() or _stale_flag("cloud.azure"):
         await job_scrape_cloud_rates()
+    if not store.get_all_hardware_costs() or store.is_stale("hardware_costs", 7 * 24 * 3600):
         await job_load_hardware_costs()
 
     # Start scheduler
@@ -316,10 +327,12 @@ def get_health():
     scrape_times = store.get_scrape_times()
     scrape_errors = store.get_scrape_errors()
     sources = {}
-    for source, last_time in scrape_times.items():
+    # Union of both key spaces so a source that has only ever errored (no
+    # successful scrape yet) still shows up as unhealthy rather than vanishing.
+    for source in sorted(set(scrape_times) | set(scrape_errors)):
         max_age = 7 * 24 * 3600 if source == "hardware_costs" else 25 * 3600
         sources[source] = {
-            "last_success": last_time,
+            "last_success": scrape_times.get(source),
             "last_error": scrape_errors.get(source),
             "stale": store.is_stale(source, max_age),
         }
