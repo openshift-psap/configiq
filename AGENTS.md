@@ -71,7 +71,21 @@ lib/
     format.ts           # Number/unit formatting helpers
 docs/                   # Architecture docs and ADRs
 public/                 # Static assets
+services/               # Backend Python microservices (FastAPI), built as
+                        # their own container images, released in unison with
+                        # the frontend (see .github/workflows/build.yml)
+  configiq-py/          # Shared Python library (import name: configiq):
+                        # GPU systems catalog, OpenTelemetry + MCP wiring.
+                        # Consumed by the services below as a uv path dependency.
+  aiconfigurator/       # Thin FastAPI wrapper over the aiconfigurator SDK
+                        # (GPU sizing, performance + memory estimation)
+  aicostings/           # GPU + LLM pricing API (scrapes providers into Valkey)
 ```
+
+The `services/` tree is Python (FastAPI + uv), separate from the Next.js
+frontend at the repo root. GPU math still lives in the aiconfigurator SDK — the
+`aiconfigurator` service is only a REST wrapper. See each service's `README.md`
+for details.
 
 ## Critical rules
 
@@ -174,7 +188,9 @@ complete interaction inventory.
 
 - Database / Prisma / PostgreSQL
 - Authentication / NextAuth.js
-- Turborepo / monorepo structure
+- Turborepo / Nx / JS monorepo tooling — the `services/` tree is a lightweight
+  polyglot layout (Next.js frontend + Python services), not a JS monorepo; no
+  workspace tool is warranted for it
 - Tailwind CSS
 
 These will be added in later phases when there is a real requirement for them.
