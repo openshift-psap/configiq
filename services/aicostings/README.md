@@ -146,7 +146,7 @@ See `docs/api/openapi.yaml` for the full OpenAPI specification.
 
 ## Project structure
 
-```
+```text
 data/
   gpu-id-mapping.yaml      # provider GPU name → AIC system ID
   hardware-costs.yaml      # GPU purchase prices (curated)

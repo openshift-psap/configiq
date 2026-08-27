@@ -14,6 +14,7 @@ from tools.api_service.scrapers.cloud_rates import (
     _merge_records,
     active_scrapers,
     load_gpu_id_mapping,
+    scrape_azure,
     scrape_vastai,
 )
 from tools.api_service.scrapers.hardware_costs import load_hardware_costs
@@ -21,6 +22,7 @@ from tools.api_service.scrapers.models import (
     _classify_tier,
     _infer_provider,
     _parse_openrouter_model,
+    fetch_litellm_models,
     fetch_openrouter_models,
     scrape_all_models,
 )
@@ -137,6 +139,25 @@ class TestFetchOpenRouterModels:
             await fetch_openrouter_models(mock_session)
 
 
+class TestFetchLiteLLMModels:
+    @pytest.mark.asyncio
+    async def test_raises_on_api_error(self):
+        # A non-200 must propagate so scrape_all_models records the source as
+        # errored rather than persisting a partial page set as a fresh scrape.
+        mock_response = MagicMock()
+        mock_response.status = 500
+
+        @asynccontextmanager
+        async def mock_get(*args, **kwargs):
+            yield mock_response
+
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+
+        with pytest.raises(RuntimeError):
+            await fetch_litellm_models(mock_session)
+
+
 class TestScrapeAllModels:
     @pytest.mark.asyncio
     async def test_merges_overrides(self):
@@ -195,6 +216,36 @@ class TestGpuIdMapping:
         assert isinstance(mapping, dict)
         assert len(mapping) > 0
         assert any("H100" in k for k in mapping)
+
+
+class TestScrapeAzure:
+    @pytest.mark.asyncio
+    async def test_skips_windows_products(self):
+        # Azure returns Linux and Windows meters for the same SKU/region; the
+        # Windows record must not overwrite the Linux on-demand price.
+        items = {"Items": [
+            {"armSkuName": "Standard_ND96asr_v4", "armRegionName": "eastus",
+             "retailPrice": 3.0, "meterName": "ND96asr v4",
+             "productName": "Virtual Machines NDasr A100 v4 Series"},
+            {"armSkuName": "Standard_ND96asr_v4", "armRegionName": "eastus",
+             "retailPrice": 5.0, "meterName": "ND96asr v4",
+             "productName": "Virtual Machines NDasr A100 v4 Series Windows"},
+        ]}
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value=items)
+
+        @asynccontextmanager
+        async def mock_get(*args, **kwargs):
+            yield mock_response
+
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+
+        records = await scrape_azure(mock_session, {"Standard_ND96asr_v4": "a100_sxm"})
+        # Only the Linux variant survives, so exactly one on-demand record at 3.0.
+        assert [r["on_demand"] for r in records] == [3.0]
+        assert all("windows" not in r["provider_region"].lower() for r in records)
 
 
 class TestAwsInstanceTypes:

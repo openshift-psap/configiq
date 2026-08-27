@@ -70,6 +70,13 @@ async def scrape_azure(session: aiohttp.ClientSession, mapping: dict[str, str]) 
                 if not region or price is None:
                     continue
 
+                # Azure returns both Linux and Windows meters for the same SKU;
+                # since records key on (system_id, region), a Windows entry would
+                # overwrite the Linux price. GPU sizing is Linux-only, so skip
+                # Windows variants (they carry a licence premium anyway).
+                if "windows" in item.get("productName", "").lower():
+                    continue
+
                 system_id = _map_gpu_name(sku, mapping)
                 if not system_id:
                     continue

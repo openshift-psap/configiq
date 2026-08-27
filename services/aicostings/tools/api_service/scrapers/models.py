@@ -155,8 +155,9 @@ async def fetch_litellm_models(session: aiohttp.ClientSession) -> list[dict[str,
             params = {"mode": "chat", "page_size": LITELLM_PAGE_SIZE, "page": page}
             async with session.get(LITELLM_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status != 200:
-                    logger.warning("LiteLLM returned %d on page %d", resp.status, page)
-                    break
+                    # Propagate so scrape_all_models records the source as errored
+                    # rather than persisting a partial page set as a fresh scrape.
+                    raise RuntimeError(f"LiteLLM returned {resp.status} on page {page}")
                 data = await resp.json()
         except Exception as e:
             logger.error("LiteLLM fetch failed on page %d: %s", page, e)
