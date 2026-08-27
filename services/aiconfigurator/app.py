@@ -85,6 +85,11 @@ class EstimateRequest(BaseModel):
     moe_tp_size: int | None = Field(default=None)
     moe_ep_size: int | None = Field(default=None)
     attention_dp_size: int = Field(default=1)
+    inclusive_tpot: bool = Field(
+        default=False,
+        description="Report TPOT as (ttft + tpot * (osl - 1)) / osl, spreading TTFT across all output tokens. "
+        "Useful for comparing with benchmarks that report inclusive TPOT (e.g. GuideLLM).",
+    )
     model_config_data: dict | None = Field(
         default=None,
         alias="model_config",
@@ -666,9 +671,13 @@ def post_estimate(
     raw = result.raw
     includes = _parse_include(include)
 
+    tpot = result.tpot
+    if req.inclusive_tpot and req.osl > 0:
+        tpot = (result.ttft + tpot * (req.osl - 1)) / req.osl
+
     resp = EstimateResponse(
         ttft=result.ttft,
-        tpot=result.tpot,
+        tpot=tpot,
         request_latency=_coerce_float(raw.get("request_latency")),
         tokens_per_second=_coerce_float(raw.get("tokens/s")),
         tokens_per_second_per_gpu=_coerce_float(raw.get("tokens/s/gpu")),

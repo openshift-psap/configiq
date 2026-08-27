@@ -816,6 +816,24 @@ class TestEstimate:
         resp = client.post("/estimate", json=body)
         assert resp.status_code == 200
 
+    @patch("tools.api_service.app.cli_estimate")
+    def test_inclusive_tpot(self, mock_estimate):
+        mock_estimate.return_value = make_mock_estimate_result()
+        body = {**VALID_ESTIMATE_BODY, "inclusive_tpot": True}
+        resp = client.post("/estimate", json=body)
+        assert resp.status_code == 200
+        data = resp.json()
+        # inclusive = (ttft + tpot * (osl - 1)) / osl
+        expected = (471.378 + 28.118 * (1000 - 1)) / 1000
+        assert data["tpot"] == pytest.approx(expected)
+        assert data["ttft"] == pytest.approx(471.378)
+
+    @patch("tools.api_service.app.cli_estimate")
+    def test_inclusive_tpot_default_false(self, mock_estimate):
+        mock_estimate.return_value = make_mock_estimate_result()
+        resp = client.post("/estimate", json=VALID_ESTIMATE_BODY)
+        assert resp.json()["tpot"] == pytest.approx(28.118)
+
 
 # ─── model_config passthrough tests ──────────────────────────────────────────
 
