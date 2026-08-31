@@ -19,6 +19,7 @@ dependencies = [
     # Not vendored as source into this repo.
     "aiconfigurator",
     "aiconfigurator-core",
+    "plotext>=5.3.2,<6",
 ]
 
 # Opt-in observability + MCP, both provided by the shared configiq package. Kept
