@@ -42,12 +42,13 @@ RUN python -m venv /opt/venv \
 COPY configiq-py /src/configiq-py
 RUN /opt/venv/bin/pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
 
-# aiconfigurator + its Rust-compiled core from the fork's release assets, plus
-# the FastAPI runtime deps.
-RUN /opt/venv/bin/pip install --no-cache-dir \
-        --find-links "${AIC_WHEELS_URL}" \
-        aiconfigurator aiconfigurator-core \
-        fastapi "uvicorn[standard]" pydantic orjson pandas pyarrow
+# Runtime deps, read from pyproject.toml (single source of truth) by the shared
+# installer — incl. the aiconfigurator SDK + its Rust-compiled core, resolved as
+# wheels from the fork's release assets via --find-links. Copy pyproject.toml
+# alone first so this layer only rebuilds when the deps change. `python` here is
+# the venv's (PATH=/opt/venv/bin), so pip installs into /opt/venv.
+COPY scripts/install-deps.py aiconfigurator/pyproject.toml /tmp/
+RUN python /tmp/install-deps.py /tmp/pyproject.toml --find-links "${AIC_WHEELS_URL}"
 
 # Thin REST wrapper. CMD imports it as api_service.app:app.
 COPY aiconfigurator/tools/api_service /app/api_service

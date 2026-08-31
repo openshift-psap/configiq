@@ -33,12 +33,14 @@ ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases
 COPY configiq-py /src/configiq-py
 RUN pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
 
-# Service runtime deps, incl. the aiconfigurator SDK wheels from the RH fork
-# (source of the GPU system catalog + vendor display names via configiq.systems;
-# pyarrow reads the SDK's bundled perf-data parquet for those names).
-RUN pip install --no-cache-dir --find-links "${AIC_WHEELS_URL}" \
-        fastapi "uvicorn[standard]" pydantic aiohttp valkey apscheduler pyyaml orjson \
-        aiconfigurator aiconfigurator-core pyarrow
+# Service runtime deps, read from pyproject.toml (single source of truth) by the
+# shared installer. Copy pyproject.toml alone first so this layer only rebuilds
+# when the deps change, not on every source edit. --find-links resolves the
+# aiconfigurator SDK wheels from the RH fork — source of the GPU system catalog
+# and vendor display names via configiq.systems, with pyarrow reading the SDK's
+# bundled perf-data parquet.
+COPY scripts/install-deps.py aicostings/pyproject.toml /tmp/
+RUN python /tmp/install-deps.py /tmp/pyproject.toml --find-links "${AIC_WHEELS_URL}"
 
 # Service source. The app reads bundled YAML from data/ and uses relative
 # imports, so it runs from the source tree at /app (python -m tools.api_service.app).
