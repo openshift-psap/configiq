@@ -552,20 +552,38 @@ class TestSystems:
 # ─── Integration tests (require SDK) ─────────────────────────────────────────
 
 
-# A 422 from these endpoints can mean either "the fallback perf database has no
-# data for this model/backend/system" (expected in CI, where only the wheel's
-# low-fidelity fallback data is present — safe to skip) or a genuine request
-# validation error (must fail). Distinguish by the *shape* of `detail`, not its
-# text: every 422 raised inside an endpoint (NoFeasibleConfigError, the
-# no-configuration-meets fallback, unsupported/absent model-backend-system) sets
-# a string detail, whereas FastAPI request-validation errors set a list detail.
-# Skipping on any string detail keeps CI green against fallback data while still
-# failing on a validation regression (list detail). The bodies below are all
-# hardcoded-valid, so the only 422 they can legitimately produce is a data one.
+# A 422 from these endpoints has three sources, only one of which is a benign
+# "skip in CI" signal:
+#   * genuine no-perf-data / no-feasible-config — the fallback perf database has
+#     no data for this request. These use endpoint-controlled, stable strings:
+#     "No performance data available for model=..." (_common_error_handler) and
+#     "No configuration meets the specified requirements." (/recommend fallback),
+#     plus NoFeasibleConfigError. Safe to skip.
+#   * any other endpoint error — e.g. an unexpected AttributeError (like the
+#     plotext-v6 incompatibility now pinned out via plotext<6), or an
+#     unsupported/absent model/backend/system. A real failure that MUST fail.
+#   * FastAPI request-validation — a list detail; the bodies below are all
+#     hardcoded-valid, so this never happens here.
+# Match the known no-data messages by text, not "any string detail": a spurious
+# 422 (e.g. the next dependency-drift bug) then surfaces as a failure instead of
+# a silent skip. Safe against CI flakiness because CI's fallback DB has data for
+# these requests (all integration tests return 200), so this predicate is only
+# ever reached in an environment that genuinely lacks perf data.
+_NO_PERF_DATA_MARKERS = (
+    "no performance data available",   # _common_error_handler perf-data path
+    "no configuration meets",          # /recommend fallback (no config found)
+    "no feasible",                     # NoFeasibleConfigError
+)
+
+
 def _missing_perf_data(resp) -> bool:
     if resp.status_code != 422:
         return False
-    return isinstance(resp.json().get("detail"), str)
+    detail = resp.json().get("detail")
+    if not isinstance(detail, str):
+        return False
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _NO_PERF_DATA_MARKERS)
 
 
 def _skip_if_missing_perf_data(resp) -> None:
