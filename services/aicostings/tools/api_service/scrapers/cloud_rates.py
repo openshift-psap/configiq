@@ -51,6 +51,7 @@ AZURE_API = "https://prices.azure.com/api/retail/prices"
 
 async def scrape_azure(session: aiohttp.ClientSession, mapping: dict[str, str]) -> list[RateRecord]:
     records: list[RateRecord] = []
+    failures = 0  # per-SKU errors; a total failure is propagated as a provider error
     for sku in AZURE_GPU_SKUS:
         try:
             params = {
@@ -60,6 +61,7 @@ async def scrape_azure(session: aiohttp.ClientSession, mapping: dict[str, str]) 
             async with session.get(AZURE_API, params=params, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
                     logger.warning("Azure %s returned %d", sku, resp.status)
+                    failures += 1
                     continue
                 data = await resp.json()
 
@@ -90,6 +92,14 @@ async def scrape_azure(session: aiohttp.ClientSession, mapping: dict[str, str]) 
                 })
         except Exception as e:
             logger.error("Azure scrape failed for %s: %s", sku, e)
+            failures += 1
+
+    # Tolerate partial failures, but propagate a complete failure so
+    # scrape_all_cloud_rates records the provider as errored rather than as a
+    # successful empty scrape — matching the raise-on-failure contract used by
+    # scrape_aws and scrape_vastai.
+    if failures == len(AZURE_GPU_SKUS):
+        raise RuntimeError(f"Azure scrape failed for all {failures} SKU(s)")
 
     logger.info("Azure: %d rate records", len(records))
     return records

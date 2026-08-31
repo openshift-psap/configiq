@@ -26,6 +26,8 @@ def mount(app, *, name: str, description: str) -> FastApiMCP:
     Returns the FastApiMCP instance. The SSE endpoint is served at /mcp.
     """
     server = FastApiMCP(app, name=name, description=description)
-    server.mount()
+    # `mount()` is deprecated; call `mount_sse` directly. Its mount_path defaults
+    # to /sse, so pass /mcp explicitly to preserve the existing SSE endpoint.
+    server.mount_sse(mount_path="/mcp")
     logger.info("MCP server initialized - SSE endpoint at /mcp")
     return server
