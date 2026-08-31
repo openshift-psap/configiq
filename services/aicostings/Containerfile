@@ -10,6 +10,9 @@
 
 FROM registry.access.redhat.com/ubi9/python-311:latest
 
+# Link the GHCR package to this repo (configiq) for the package UI + inherited access.
+LABEL org.opencontainers.image.source=https://github.com/redhat-performance/configiq
+
 # The UBI python image defaults to USER 1001 in /opt/app-root; run as root only
 # for the install steps, then hand everything back to the arbitrary-UID user.
 USER 0

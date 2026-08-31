@@ -13,6 +13,11 @@
 
 FROM python:3.12-slim
 
+# Link the GHCR package to this repo (configiq), not the SDK-wheels fork whose
+# name it shares. Set on package creation; add here so future publishes resolve
+# to configiq/packages rather than redhat-performance/aiconfigurator.
+LABEL org.opencontainers.image.source=https://github.com/redhat-performance/configiq
+
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
