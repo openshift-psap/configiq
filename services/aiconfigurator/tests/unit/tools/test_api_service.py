@@ -568,6 +568,18 @@ def _missing_perf_data(resp) -> bool:
     return isinstance(resp.json().get("detail"), str)
 
 
+def _skip_if_missing_perf_data(resp) -> None:
+    """Skip (not fail) when the fallback perf database has no data for a request,
+    embedding the exact 422 body in the skip reason. Combined with pytest's
+    `-ra` summary (see pyproject addopts), this makes CI logs always show the
+    precise detail string the SDK returned for a no-data 422 — so if the
+    fallback data or its error wording ever changes, we can read the real
+    message straight from the CI summary instead of adding a throwaway probe.
+    """
+    if _missing_perf_data(resp):
+        pytest.skip(f"no perf data in fallback database; 422 detail: {resp.text}")
+
+
 @pytest.mark.skipif(
     not _sdk_available(),
     reason="aiconfigurator SDK not installed or missing perf data",
@@ -581,8 +593,7 @@ class TestIntegration:
             "target_concurrency": 32,
             "top_n": 1,
         })
-        if _missing_perf_data(resp):
-            pytest.skip("no perf data for this model/backend/system in the fallback database")
+        _skip_if_missing_perf_data(resp)
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["configs"]) == 1
@@ -599,8 +610,7 @@ class TestIntegration:
             "target_concurrency": 32,
             "top_n": 1,
         })
-        if _missing_perf_data(resp):
-            pytest.skip("no perf data for this model/backend/system in the fallback database")
+        _skip_if_missing_perf_data(resp)
         assert resp.status_code == 200
         cfg = resp.json()["configs"][0]
         assert cfg["serving_config"] is not None
@@ -614,8 +624,7 @@ class TestIntegration:
             "backend_version": "0.24.0",
             "tp_size": 2,
         })
-        if _missing_perf_data(resp):
-            pytest.skip("no perf data for this model/backend/system in the fallback database")
+        _skip_if_missing_perf_data(resp)
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_kv_size_bytes"] > 0
@@ -643,8 +652,7 @@ class TestIntegration:
             "tp_size": 2,
             "batch_size": 48,
         })
-        if _missing_perf_data(resp):
-            pytest.skip("no perf data for this model/backend/system in the fallback database")
+        _skip_if_missing_perf_data(resp)
         assert resp.status_code == 200
         data = resp.json()
         assert data["ttft"] > 0
@@ -660,8 +668,7 @@ class TestIntegration:
             "tp_size": 2,
             "batch_size": 48,
         })
-        if _missing_perf_data(resp):
-            pytest.skip("no perf data for this model/backend/system in the fallback database")
+        _skip_if_missing_perf_data(resp)
         assert resp.status_code == 200
         cfg = resp.json()
         assert cfg["serving_config"] is not None

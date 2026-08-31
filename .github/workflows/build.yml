@@ -18,8 +18,11 @@ jobs:
       packages: write
 
     strategy:
-      # Release all three images in unison: if any leg fails, cancel the rest so
-      # a given tag never publishes a partial set of images.
+      # Release all three images in unison. fail-fast cancels the remaining legs
+      # the moment one fails, which shrinks — but does not eliminate — the window
+      # where a tag has only some images: each leg pushes independently (push:
+      # true), so a leg that finished before the failure has already published.
+      # A corrected rerun republishes all three at the same tag, restoring the set.
       fail-fast: true
       matrix:
         include:

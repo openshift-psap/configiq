@@ -55,6 +55,10 @@ find-links = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# -ra: report reasons for all non-passing outcomes (incl. skips) in the summary,
+# so the integration skip reason — which carries the exact no-perf-data 422 body
+# (see _skip_if_missing_perf_data) — always shows up in CI logs.
+addopts = "-ra"
 
 [tool.ruff]
 line-length = 120
