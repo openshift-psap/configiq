@@ -16,9 +16,12 @@ dependencies = [
     "configiq",
     # aiconfigurator SDK + its Rust-compiled core, consumed as wheels published
     # by the Red Hat fork (see [tool.uv] find-links below and the Containerfile).
-    # Not vendored as source into this repo.
-    "aiconfigurator",
-    "aiconfigurator-core",
+    # Not vendored as source into this repo. Pinned to 0.11.0: the wrapper targets
+    # that SDK's API (e.g. aiconfigurator.cli.api) and the rolling wheel feed has
+    # served incompatible builds — unpinned resolution once silently backtracked
+    # to 0.1.1, breaking the import. Bump this in lockstep with find-links below.
+    "aiconfigurator==0.11.0",
+    "aiconfigurator-core==0.11.0",
     "plotext>=5.3.2,<6",
 ]
 
@@ -45,12 +48,13 @@ dev = [
 configiq = { path = "../configiq-py", editable = true }
 
 # The aiconfigurator SDK wheels are published as GitHub Release assets by the
-# Red Hat fork, not on PyPI. Platform availability (currently manylinux x86_64
-# only) is dictated by that upstream, not enforced here — this service imposes
-# no platform or version constraints of its own.
+# Red Hat fork, not on PyPI. Point at an immutable per-build release (not the
+# rolling deploy-api-latest) so the pinned 0.11.0 wheels above always resolve;
+# the rolling tag has served incompatible builds. Bump this tag together with
+# the aiconfigurator/aiconfigurator-core pins in [project.dependencies].
 [tool.uv]
 find-links = [
-    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest",
+    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+ce6a0fff",
 ]
 
 [tool.pytest.ini_options]

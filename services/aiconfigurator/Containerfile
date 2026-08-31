@@ -25,10 +25,11 @@ ENV PYTHONUNBUFFERED=1 \
     PATH=/opt/venv/bin:${PATH}
 
 # GitHub Release that hosts the aiconfigurator / aiconfigurator-core wheels.
-# Defaults to the rolling "latest" build of the fork's deploy/api branch.
-# Override at build time to pin a specific release, e.g.
-#   --build-arg AIC_WHEELS_URL=.../expanded_assets/deploy-api-v0.11.0+ce6a0fff
-ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest
+# Pinned to an immutable per-build release so the 0.11.0 pins in pyproject.toml
+# always resolve; the rolling deploy-api-latest tag has served incompatible
+# builds (an unpinned rebuild once backtracked to 0.1.1). Bump this in lockstep
+# with the version pins in pyproject.toml when moving to a newer SDK.
+ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+ce6a0fff
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \

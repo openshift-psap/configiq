@@ -22,9 +22,12 @@ dependencies = [
     # (via configiq.systems) so aicostings and aiconfigurator never drift. The
     # SDK + its Rust-compiled core are consumed as wheels from the Red Hat fork
     # (see [tool.uv] find-links below and the Containerfile); pyarrow reads the
-    # SDK's bundled perf-data parquet for the display names.
-    "aiconfigurator",
-    "aiconfigurator-core",
+    # SDK's bundled perf-data parquet for the display names. Pinned to 0.11.0 to
+    # match the aiconfigurator service — the rolling wheel feed has served
+    # incompatible builds, so unpinned resolution can silently backtrack. Bump in
+    # lockstep with find-links below and the aiconfigurator service's pins.
+    "aiconfigurator==0.11.0",
+    "aiconfigurator-core==0.11.0",
     "pyarrow",
 ]
 
@@ -50,11 +53,13 @@ mcp = ["configiq[mcp]"]
 configiq = { path = "../configiq-py", editable = true }
 
 # The aiconfigurator SDK wheels are published as GitHub Release assets by the
-# Red Hat fork, not on PyPI. Platform availability (currently manylinux x86_64
-# only) is dictated by that upstream, not enforced here.
+# Red Hat fork, not on PyPI. Point at an immutable per-build release (not the
+# rolling deploy-api-latest) so the pinned 0.11.0 wheels above always resolve;
+# the rolling tag has served incompatible builds. Bump this tag together with
+# the aiconfigurator/aiconfigurator-core pins in [project.dependencies].
 [tool.uv]
 find-links = [
-    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-latest",
+    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+ce6a0fff",
 ]
 
 [tool.pytest.ini_options]
