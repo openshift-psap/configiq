@@ -10,6 +10,7 @@ import EyeIcon from '@patternfly/react-icons/dist/esm/icons/eye-icon';
 import EyeSlashIcon from '@patternfly/react-icons/dist/esm/icons/eye-slash-icon';
 import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon';
 import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle-icon';
+import DollarSignIcon from '@patternfly/react-icons/dist/esm/icons/dollar-sign-icon';
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 
 import styles from './AdvancedEstimate.module.css';
@@ -613,7 +614,43 @@ export default function AdvancedEstimate() {
                 </>
               }
             />
+
+            {/* Est. monthly cost — only when costings is enabled and a rate is available */}
+            {costingsEnabled && monthlyCost != null && pricePerHour != null && (
+              <FlipTile
+                front={
+                  <>
+                    <span className={styles.tileLabel}><DollarSignIcon /> Est. monthly cost</span>
+                    <span className={styles.tileValue}>
+                      ${Math.round(monthlyCost).toLocaleString()}<span className={styles.tileUnit}>/mo</span>
+                    </span>
+                    <span className={styles.tileSub}>
+                      {numGpus} × ${pricePerHour.toFixed(2)}/hr{livePrice != null ? ' · live rate' : ' · amortized hardware'}
+                    </span>
+                  </>
+                }
+                back={
+                  <>
+                    <div className={styles.backTitle}>Monthly cost</div>
+                    <div className={styles.formula}>
+                      GPUs: <span className={styles.em}>{numGpus}</span><br />
+                      rate: <span className={styles.em}>${pricePerHour.toFixed(2)}/GPU-hr</span><br />
+                      hours/mo: <span className={styles.em}>{HOURS_PER_MONTH}</span><br />
+                      total = <span className={styles.em}>${Math.round(monthlyCost).toLocaleString()}/mo</span>
+                    </div>
+                  </>
+                }
+              />
+            )}
           </div>
+
+          {costingsEnabled && monthlyCost == null && (
+            <div className={styles.card} style={{ marginBottom: 24, fontSize: '13px', color: '#54585c' }}>
+              <DollarSignIcon /> Cloud rate and hardware cost unavailable for this GPU —
+              pick a provider on the Sources page or choose a GPU with published rates
+              to see the estimated monthly cost.
+            </div>
+          )}
 
           {/* ─── Estimated serving performance ─── */}
           <div className={styles.card} style={{ marginBottom: 24 }}>
