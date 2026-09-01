@@ -163,7 +163,8 @@ class TestScrapeAllModels:
     async def test_merges_overrides(self):
         openrouter_models = [
             {"id": "a/model-1", "name": "M1", "provider": "A", "tier": "fast",
-             "price_per_m_input": 1.0, "price_per_m_output": 2.0, "context_window": 8000},
+             "price_per_m_input": 1.0, "price_per_m_output": 2.0, "context_window": 8000,
+             "source": "openrouter"},
         ]
         overrides = [
             {"id": "a/model-1", "name": "M1 Override", "provider": "A", "tier": "fast",
@@ -178,13 +179,73 @@ class TestScrapeAllModels:
             patch("tools.api_service.scrapers.models.load_curated_overrides", return_value=overrides),
         ):
             mock_session = AsyncMock()
-            result, _errors = await scrape_all_models(mock_session)
+            catalogs, _errors = await scrape_all_models(mock_session)
 
+        result = catalogs["merged"]
         ids = [m["id"] for m in result]
         assert "a/model-1" in ids
         assert "custom/model" in ids
         overridden = next(m for m in result if m["id"] == "a/model-1")
         assert overridden["price_per_m_input"] == 0.5
+        assert overridden["source"] == "override"
+
+    @pytest.mark.asyncio
+    async def test_override_is_field_level_patch(self):
+        # An override that specifies only a price field must overlay that field
+        # and inherit the rest (name, tier, context_window) from the scraped
+        # record — not replace the whole record.
+        openrouter_models = [
+            {"id": "a/model-1", "name": "M1", "provider": "A", "tier": "fast",
+             "price_per_m_input": 1.0, "price_per_m_output": 2.0, "context_window": 8000,
+             "source": "openrouter"},
+        ]
+        overrides = [{"id": "a/model-1", "price_per_m_input": 0.5}]
+
+        with (
+            patch("tools.api_service.scrapers.models.fetch_openrouter_models", return_value=openrouter_models),
+            patch("tools.api_service.scrapers.models.fetch_litellm_models", return_value=[]),
+            patch("tools.api_service.scrapers.models.load_curated_overrides", return_value=overrides),
+        ):
+            patched = next(m for m in (await scrape_all_models(AsyncMock()))[0]["merged"]
+                           if m["id"] == "a/model-1")
+
+        assert patched["price_per_m_input"] == 0.5   # overlaid
+        assert patched["price_per_m_output"] == 2.0  # inherited from OpenRouter
+        assert patched["name"] == "M1"               # inherited
+        assert patched["context_window"] == 8000     # inherited
+        assert patched["source"] == "override"
+
+    @pytest.mark.asyncio
+    async def test_per_source_catalogs_and_precedence(self):
+        # OpenRouter wins over LiteLLM on a duplicate id in the merged view, but
+        # each per-source catalog keeps its own (tagged) records.
+        openrouter_models = [
+            {"id": "dup/model", "name": "OR", "provider": "X", "tier": "balanced",
+             "price_per_m_input": 1.0, "price_per_m_output": 2.0, "context_window": 8000,
+             "source": "openrouter"},
+        ]
+        litellm_models = [
+            {"id": "dup/model", "name": "LT", "provider": "X", "tier": "balanced",
+             "price_per_m_input": 9.0, "price_per_m_output": 9.0, "context_window": 4000,
+             "source": "litellm"},
+            {"id": "lt/only", "name": "LT only", "provider": "X", "tier": "balanced",
+             "price_per_m_input": 0.1, "price_per_m_output": 0.2, "context_window": 2000,
+             "source": "litellm"},
+        ]
+
+        with (
+            patch("tools.api_service.scrapers.models.fetch_openrouter_models", return_value=openrouter_models),
+            patch("tools.api_service.scrapers.models.fetch_litellm_models", return_value=litellm_models),
+            patch("tools.api_service.scrapers.models.load_curated_overrides", return_value=[]),
+        ):
+            catalogs, _errors = await scrape_all_models(AsyncMock())
+
+        assert [m["id"] for m in catalogs["openrouter"]] == ["dup/model"]
+        assert {m["id"] for m in catalogs["litellm"]} == {"dup/model", "lt/only"}
+        dup = next(m for m in catalogs["merged"] if m["id"] == "dup/model")
+        assert dup["source"] == "openrouter"        # OpenRouter wins the collision
+        assert dup["price_per_m_input"] == 1.0
+        assert {m["id"] for m in catalogs["merged"]} == {"dup/model", "lt/only"}
 
 
 # ── Cloud rates tests ─────────────────────────────────────────────────────────

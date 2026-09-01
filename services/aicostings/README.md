@@ -12,7 +12,7 @@ results in Valkey, and serves them via a REST API.
 
 | Endpoint | Description |
 |---|---|
-| `GET /models` | Frontier LLM API pricing ($/M tokens, by provider and tier) |
+| `GET /models` | Frontier LLM API pricing ($/M tokens, by provider and tier); `?source=merged\|openrouter\|litellm` selects a feed |
 | `GET /systems` | GPU pricing (cloud $/hr by provider.region, hardware new/used range) |
 | `GET /health` | Service status (last scrape timestamps, staleness flags) |
 | `GET /metrics` | Prometheus / OTLP-JSON metrics (requires the `otel` extra) |
@@ -60,12 +60,23 @@ podman compose up --build
 
 ### Frontier model pricing
 
-- **OpenRouter** (`GET https://openrouter.ai/api/v1/models`) — primary
-  source; structured pricing for 100+ models.
+Two peer pricing feeds plus a curated override layer. Every model in the
+response carries a `source` field so callers can trace where a price came from,
+and `GET /models?source=` serves a single feed or the merged view:
+
+- **OpenRouter** (`GET https://openrouter.ai/api/v1/models`) — `source="openrouter"`;
+  structured pricing for 100+ models.
 - **LiteLLM Catalog** (`GET https://api.litellm.ai/model_catalog`) —
-  secondary source; fills gaps for models missing from OpenRouter.
-- **Curated YAML overrides** (`data/model-overrides.yaml`) — for models
-  missing from both, and to override either.
+  `source="litellm"`; comparable coverage from an independent feed.
+- **Curated YAML overrides** (`data/model-overrides.yaml`, optional) —
+  `source="override"`; adds models missing from both feeds and corrects
+  individual fields.
+
+The default `merged` view is a union keyed by model id. On a duplicate id the
+precedence is **overrides > OpenRouter > LiteLLM**. Overrides are applied as
+*field-level patches* — an override overlays only the fields it specifies onto
+the matching scraped record, so unspecified fields keep tracking the live feeds;
+an override for an id neither feed has is a full add.
 
 ### Cloud GPU pricing
 
