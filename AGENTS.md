@@ -65,8 +65,10 @@ lib/
   gpu-math/             # Legacy client-side GPU sizing — historical/fallback only
   api/                  # AIConfigurator API clients — source of truth for GPU math
   pricing/              # Cloud GPU pricing data
-  hooks/                # useAicCatalog fetches models/GPUs directly from AIC
-                        # client-side, bypassing api/ (inconsistent — follow-up)
+  hooks/                # useAicCatalog → /api/catalog, useCostings →
+                        # /api/costings/* — both go through same-origin api/
+                        # proxies (server-side gateway env), no direct external
+                        # fetches from the browser
   utils/
     format.ts           # Number/unit formatting helpers
 docs/                   # Architecture docs and ADRs
