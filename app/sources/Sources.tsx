@@ -82,6 +82,31 @@ export default function Sources() {
     return Array.from(keys).sort();
   }, [costings.gpuCloudRates]);
 
+  // Group the flat provider.region keys by provider (the token before the first
+  // '.') so a provider with many regions (e.g. Azure) collapses into one
+  // accordion row instead of flooding the list and burying single-region
+  // providers like vast.ai.
+  const providerGroups = React.useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const key of providers) {
+      const provider = key.split('.')[0];
+      if (!groups.has(provider)) groups.set(provider, []);
+      groups.get(provider)!.push(key);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [providers]);
+
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({});
+
+  // Keep the group holding the current selection open so the active region is
+  // always visible without hunting for it.
+  React.useEffect(() => {
+    if (preferredCloudProvider) {
+      const g = preferredCloudProvider.split('.')[0];
+      setExpandedGroups(prev => (prev[g] ? prev : { ...prev, [g]: true }));
+    }
+  }, [preferredCloudProvider]);
+
   // Per-source model provenance counts (present when source=merged).
   const modelSourceCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -315,17 +340,46 @@ export default function Sources() {
             No cloud rates available — check aicostings connection above.
           </div>
         ) : (
-          <div className={styles.providerGrid}>
-            {providers.map(p => (
-              <button
-                key={p}
-                className={`${styles.providerOption} ${preferredCloudProvider === p ? styles.providerOptionActive : ''}`}
-                onClick={() => setPreferredCloudProvider(p)}
-              >
-                <span className={styles.providerDot} />
-                {p}
-              </button>
-            ))}
+          <div className={styles.providerGroups}>
+            {providerGroups.map(([provider, keys]) => {
+              const expanded = expandedGroups[provider] ?? false;
+              const activeHere = preferredCloudProvider?.split('.')[0] === provider;
+              return (
+                <div key={provider} className={styles.providerGroup}>
+                  <button
+                    type="button"
+                    className={styles.providerGroupHeader}
+                    onClick={() => setExpandedGroups(prev => ({ ...prev, [provider]: !expanded }))}
+                    aria-expanded={expanded}
+                  >
+                    <span className={`${styles.providerGroupChevron} ${expanded ? styles.providerGroupChevronOpen : ''}`}>▸</span>
+                    <span className={styles.providerGroupName}>{provider}</span>
+                    <span className={styles.providerGroupCount}>
+                      {keys.length} {keys.length === 1 ? 'region' : 'regions'}
+                    </span>
+                    {activeHere && (
+                      <span className={styles.providerGroupSelected}>
+                        {preferredCloudProvider!.slice(provider.length + 1)}
+                      </span>
+                    )}
+                  </button>
+                  {expanded && (
+                    <div className={styles.providerGroupBody}>
+                      {keys.map(p => (
+                        <button
+                          key={p}
+                          className={`${styles.providerOption} ${preferredCloudProvider === p ? styles.providerOptionActive : ''}`}
+                          onClick={() => setPreferredCloudProvider(p)}
+                        >
+                          <span className={styles.providerDot} />
+                          {p.slice(provider.length + 1)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

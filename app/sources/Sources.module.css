@@ -145,6 +145,79 @@
 }
 .sourceLink:hover { text-decoration: underline; }
 
+/* Grouped provider accordion (one collapsible row per cloud provider) */
+.providerGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+.providerGroup {
+  border: 1px solid var(--gc-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.providerGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--gc-text);
+  text-align: left;
+  transition: background 0.15s;
+}
+.providerGroupHeader:hover { background: #f0f9ff; }
+
+.providerGroupChevron {
+  font-size: 11px;
+  color: var(--gc-text-2);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.providerGroupChevronOpen { transform: rotate(90deg); }
+
+.providerGroupName {
+  font-family: var(--mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  color: var(--gc-text);
+}
+
+.providerGroupCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gc-text-2);
+}
+
+.providerGroupSelected {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+  background: #e8f4ff;
+  border-radius: var(--radius);
+  padding: 2px 8px;
+}
+
+.providerGroupBody {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--gc-line);
+  background: #fff;
+}
+
 .emptyState {
   padding: 32px 20px;
   text-align: center;
