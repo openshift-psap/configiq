@@ -1,25 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { useSettings, AICOSTINGS_API_URL } from '@/contexts/SettingsContext';
+import Link from 'next/link';
+import { useSettings, type PricingSource } from '@/contexts/SettingsContext';
+import { useCostings, type SourceStatus } from '@/lib/hooks/useCostings';
 import { useOnPremProfile, DEFAULT_PROFILE, type OnPremCostProfile } from '@/lib/hooks/useOnPremProfile';
 import styles from './Sources.module.css';
 
-interface SourceStatus {
-  last_success: string | null;
-  last_error: { at: string; message: string } | null;
-  stale: boolean;
-}
-
-interface HealthData {
-  version: string;
-  sources: Record<string, SourceStatus>;
-}
-
-interface CloudRate {
-  on_demand: number | null;
-  reserved_1yr: number | null;
-}
+const PRICING_SOURCES: { id: PricingSource; label: string; desc: string }[] = [
+  { id: 'merged', label: 'Merged', desc: 'OpenRouter + LiteLLM, deduplicated' },
+  { id: 'openrouter', label: 'OpenRouter', desc: 'OpenRouter feed only' },
+  { id: 'litellm', label: 'LiteLLM', desc: 'LiteLLM catalog only' },
+];
 
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
@@ -50,40 +42,71 @@ function newProfile(): OnPremCostProfile {
 }
 
 export default function Sources() {
-  const { preferredCloudProvider, setPreferredCloudProvider } = useSettings();
+  const {
+    hydrated, costingsEnabled,
+    preferredCloudProvider, setPreferredCloudProvider,
+    pricingSource, setPricingSource,
+  } = useSettings();
   const { profiles, activeProfileId, setActiveProfile, saveProfile, deleteProfile, exportProfile, importProfile } = useOnPremProfile();
   const [editingProfile, setEditingProfile] = React.useState<OnPremCostProfile | null>(null);
   const [importText, setImportText] = React.useState('');
-  const [health, setHealth] = React.useState<HealthData | null>(null);
-  const [healthLoading, setHealthLoading] = React.useState(true);
-  const [healthError, setHealthError] = React.useState<string | null>(null);
-  const [providers, setProviders] = React.useState<string[]>([]);
 
-  React.useEffect(() => {
-    setHealthLoading(true);
-    fetch(`${AICOSTINGS_API_URL}/health`)
-      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then((d: HealthData) => { setHealth(d); setHealthError(null); })
-      .catch(e => setHealthError(String(e)))
-      .finally(() => setHealthLoading(false));
-  }, []);
+  // Single source of truth: the shared costings hook (same-origin proxy, cached,
+  // and a no-op that fires zero network calls while costings is disabled).
+  const costings = useCostings(costingsEnabled, pricingSource);
+  const health = costings.health;
+  // Treat pre-hydration as loading so the table doesn't flash empty before the
+  // persisted toggle/source are known.
+  const healthLoading = costings.isLoading || !hydrated;
+  const healthError = costings.error;
 
-  React.useEffect(() => {
-    fetch(`${AICOSTINGS_API_URL}/systems?include=cloud`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => {
-        const keys = new Set<string>();
-        for (const sys of (d.systems ?? [])) {
-          for (const k of Object.keys(sys.cloud_rates ?? {})) keys.add(k);
-        }
-        setProviders(Array.from(keys).sort());
-      })
-      .catch(() => {});
-  }, []);
+  // Cloud providers available across all GPU systems (provider.region keys).
+  const providers = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const rates of costings.gpuCloudRates.values()) {
+      for (const k of Object.keys(rates)) keys.add(k);
+    }
+    return Array.from(keys).sort();
+  }, [costings.gpuCloudRates]);
+
+  // Per-source model provenance counts (present when source=merged).
+  const modelSourceCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of costings.models) {
+      const key = m.source ?? 'unknown';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [costings.models]);
 
   const sortedSources = health
     ? Object.entries(health.sources).sort(([a], [b]) => a.localeCompare(b))
     : [];
+
+  const staleOrErrored = sortedSources.filter(([, s]) => s.stale || s.last_error).length;
+  const allFresh = sortedSources.length > 0 && staleOrErrored === 0;
+
+  // Gate the whole page on the Settings toggle. useCostings already fires no
+  // requests while disabled, so this only controls what is rendered.
+  if (hydrated && !costingsEnabled) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <h1 className={styles.pageTitle}>Sources</h1>
+          <p className={styles.subtitle}>
+            Pricing data source status, cloud provider preference, and on-prem cost profiles.
+          </p>
+        </div>
+        <div className={styles.section}>
+          <div className={styles.emptyState}>
+            Costings features are disabled. Enable them in{' '}
+            <Link href="/settings" style={{ color: 'var(--blue)', fontWeight: 600 }}>Settings</Link>{' '}
+            to view data sources.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -105,6 +128,31 @@ export default function Sources() {
             </div>
           </div>
         </div>
+
+        {/* Freshness summary (read-only; the API has no on-demand re-scrape) */}
+        {!healthLoading && !healthError && sortedSources.length > 0 && (
+          <div className={styles.summaryGrid}>
+            <div className={styles.summaryTile}>
+              <div className={`${styles.summaryValue} ${allFresh ? styles.summaryValueOk : styles.summaryValueWarn}`}>
+                {allFresh ? 'All fresh' : `${staleOrErrored} stale`}
+              </div>
+              <div className={styles.summaryLabel}>{sortedSources.length} sources</div>
+            </div>
+            <div className={styles.summaryTile}>
+              <div className={styles.summaryValue}>{costings.models.length}</div>
+              <div className={styles.summaryLabel}>Models priced</div>
+            </div>
+            <div className={styles.summaryTile}>
+              <div className={styles.summaryValue}>{costings.gpuCloudRates.size}</div>
+              <div className={styles.summaryLabel}>GPUs w/ cloud rate</div>
+            </div>
+            <div className={styles.summaryTile}>
+              <div className={styles.summaryValue}>{costings.gpuHardwareCosts.size}</div>
+              <div className={styles.summaryLabel}>GPUs w/ hw cost</div>
+            </div>
+          </div>
+        )}
+
         <table className={styles.table}>
           <thead>
             <tr>
@@ -123,7 +171,7 @@ export default function Sources() {
             {healthError && (
               <tr className={styles.loadingRow}>
                 <td colSpan={4} style={{ color: '#c9190b' }}>
-                  Could not reach {AICOSTINGS_API_URL} — {healthError}
+                  Could not reach the aicostings service — {healthError}
                 </td>
               </tr>
             )}
@@ -146,6 +194,41 @@ export default function Sources() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Section 1b: Model pricing source ── */}
+      <div className={styles.section}>
+        <div className={styles.sectionHead}>
+          <div>
+            <div className={styles.sectionTitle}>Model pricing source</div>
+            <div className={styles.sectionDesc}>
+              Which feed to use for hosted LLM API pricing. Merged combines both,
+              keyed by model id, with curated overrides applied.
+            </div>
+          </div>
+        </div>
+        <div className={styles.providerGrid}>
+          {PRICING_SOURCES.map(s => (
+            <button
+              key={s.id}
+              className={`${styles.providerOption} ${pricingSource === s.id ? styles.providerOptionActive : ''}`}
+              onClick={() => setPricingSource(s.id)}
+              title={s.desc}
+            >
+              <span className={styles.providerDot} />
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {pricingSource === 'merged' && Object.keys(modelSourceCounts).length > 0 && (
+          <div style={{ padding: '0 20px 16px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {Object.entries(modelSourceCounts).sort(([a], [b]) => a.localeCompare(b)).map(([src, count]) => (
+              <span key={src} className={styles.sourceCount} style={{ margin: 0 }}>
+                {src}: {count}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Section 2: Cloud provider preference ── */}

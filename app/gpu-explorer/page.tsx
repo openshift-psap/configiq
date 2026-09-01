@@ -44,8 +44,8 @@ export default function GpuExplorerPage() {
   const [yAxis, setYAxis] = React.useState<YAxis>('throughput-index');
   const [vendorFilter, setVendorFilter] = React.useState<'all' | 'nvidia' | 'amd'>('all');
   const { gpuOptions, isLoading } = useAicCatalog();
-  const { costingsEnabled, preferredCloudProvider } = useSettings();
-  const costings = useCostings(costingsEnabled);
+  const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
 
   React.useEffect(() => {
     setMounted(true);

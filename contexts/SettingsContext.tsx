@@ -4,6 +4,7 @@ import * as React from 'react';
 import { loadAppConfig, getAppConfig } from '@/lib/app-config';
 
 export type InferenceBackend = 'vllm' | 'tensorrt-llm' | 'sglang';
+export type PricingSource = 'merged' | 'openrouter' | 'litellm';
 
 const STORAGE_KEYS = {
   defaultModel: 'settings_default_model',
@@ -12,9 +13,8 @@ const STORAGE_KEYS = {
   backendVersion: 'settings_backend_version',
   costingsEnabled: 'settings_costings_enabled',
   preferredCloudProvider: 'settings_preferred_cloud_provider',
+  pricingSource: 'settings_pricing_source',
 } as const;
-
-export const AICOSTINGS_API_URL = process.env.NEXT_PUBLIC_AICOSTINGS_API_URL ?? 'https://aicostings.dev';
 
 interface SettingsState {
   hydrated: boolean;
@@ -24,12 +24,14 @@ interface SettingsState {
   backendVersion: string;
   costingsEnabled: boolean;
   preferredCloudProvider: string | null;
+  pricingSource: PricingSource;
   setDefaultModel: (v: string) => void;
   setHfToken: (v: string) => void;
   setInferenceBackend: (v: InferenceBackend) => void;
   setBackendVersion: (v: string) => void;
   setCostingsEnabled: (v: boolean) => void;
   setPreferredCloudProvider: (v: string | null) => void;
+  setPricingSource: (v: PricingSource) => void;
 }
 
 const SettingsContext = React.createContext<SettingsState>({
@@ -40,12 +42,14 @@ const SettingsContext = React.createContext<SettingsState>({
   backendVersion: '',
   costingsEnabled: false,
   preferredCloudProvider: null,
+  pricingSource: 'merged',
   setDefaultModel: () => {},
   setHfToken: () => {},
   setInferenceBackend: () => {},
   setBackendVersion: () => {},
   setCostingsEnabled: () => {},
   setPreferredCloudProvider: () => {},
+  setPricingSource: () => {},
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -56,6 +60,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [backendVersion, setBackendVersionState] = React.useState('');
   const [costingsEnabled, setCostingsEnabledState] = React.useState(false);
   const [preferredCloudProvider, setPreferredCloudProviderState] = React.useState<string | null>(null);
+  const [pricingSource, setPricingSourceState] = React.useState<PricingSource>('merged');
 
   React.useEffect(() => {
     async function init() {
@@ -79,6 +84,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setCostingsEnabledState(savedCostings === 'true');
 
       setPreferredCloudProviderState(localStorage.getItem(STORAGE_KEYS.preferredCloudProvider));
+
+      const savedPricingSource = localStorage.getItem(STORAGE_KEYS.pricingSource);
+      if (savedPricingSource === 'merged' || savedPricingSource === 'openrouter' || savedPricingSource === 'litellm') {
+        setPricingSourceState(savedPricingSource);
+      }
 
       setHydrated(true);
     }
@@ -127,17 +137,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setPricingSource = React.useCallback((v: PricingSource) => {
+    setPricingSourceState(v);
+    localStorage.setItem(STORAGE_KEYS.pricingSource, v);
+  }, []);
+
   const value = React.useMemo<SettingsState>(
     () => ({
       hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-      costingsEnabled, preferredCloudProvider,
+      costingsEnabled, preferredCloudProvider, pricingSource,
       setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-      setCostingsEnabled, setPreferredCloudProvider,
+      setCostingsEnabled, setPreferredCloudProvider, setPricingSource,
     }),
     [hydrated, defaultModel, hfToken, inferenceBackend, backendVersion,
-     costingsEnabled, preferredCloudProvider,
+     costingsEnabled, preferredCloudProvider, pricingSource,
      setDefaultModel, setHfToken, setInferenceBackend, setBackendVersion,
-     setCostingsEnabled, setPreferredCloudProvider],
+     setCostingsEnabled, setPreferredCloudProvider, setPricingSource],
   );
 
   return (

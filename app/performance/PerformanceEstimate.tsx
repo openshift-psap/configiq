@@ -74,8 +74,8 @@ const QUICK_ESTIMATE_TOUR: TourStep[] = [
 
 export default function QuickEstimate() {
   console.log('🔵 QuickEstimate component mounting');
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled, preferredCloudProvider } = useSettings();
-  const costings = useCostings(costingsEnabled);
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
   const [model, setModel] = React.useState('');

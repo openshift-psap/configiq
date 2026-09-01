@@ -67,8 +67,8 @@ export default function RoutingEconomics() {
   const [tiers, setTiers] = React.useState<TierState[]>(initTiers)
   const [livePricing, setLivePricing] = React.useState<Record<string, number>>({})
   const { modelOptions: aicModels, gpuOptions: aicGpus } = useAicCatalog()
-  const { costingsEnabled, preferredCloudProvider } = useSettings()
-  const costings = useCostings(costingsEnabled)
+  const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings()
+  const costings = useCostings(costingsEnabled, pricingSource)
 
   const OPEN_MODELS = React.useMemo(() => aicModels.map(id => ({
     id,

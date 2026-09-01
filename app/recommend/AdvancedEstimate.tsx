@@ -136,8 +136,8 @@ function friendlyErrorHint(code: string | null): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdvancedEstimate() {
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled } = useSettings();
-  const costings = useCostings(costingsEnabled);
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled, pricingSource } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
 

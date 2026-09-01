@@ -148,3 +148,50 @@
   font-style: italic;
   padding: 20px 16px;
 }
+
+/* Freshness summary tiles */
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gc-line);
+}
+
+.summaryTile {
+  border: 1px solid var(--gc-line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: #fafafa;
+}
+
+.summaryValue {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gc-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.summaryValueOk { color: #3e8635; }
+.summaryValueWarn { color: #795600; }
+
+.summaryLabel {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-2);
+  margin-top: 4px;
+}
+
+/* Model pricing source selector */
+.sourceCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gc-text-2);
+  margin-left: auto;
+  font-weight: 500;
+}

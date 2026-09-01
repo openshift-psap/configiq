@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AICOSTINGS_API_URL } from '@/contexts/SettingsContext'
+import type { PricingSource } from '@/contexts/SettingsContext'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -14,6 +14,8 @@ export interface FrontierModel {
   price_per_m_output: number
   context_window: number | null
   updated_at: string | null
+  /** Which feed this model's pricing came from (present in ?source=merged). */
+  source?: 'openrouter' | 'litellm' | 'override'
 }
 
 export interface CloudRates {
@@ -69,13 +71,17 @@ let cachedHealth: CostingsHealth | null = null
 let cachedModelsUpdatedAt: string | null = null
 let cachedModelsStale = false
 let cacheTimestamp: number | null = null
+// The pricing source the cache currently holds; a change invalidates it so
+// switching the source on the Sources page refetches the right feed.
+let cachedSource: PricingSource | null = null
 let fetchPromise: Promise<void> | null = null
 
-function isCacheValid(): boolean {
+function isCacheValid(source: PricingSource): boolean {
   return (
     cachedModels !== null &&
     cachedCloudRates !== null &&
     cachedHardwareCosts !== null &&
+    cachedSource === source &&
     cacheTimestamp !== null &&
     Date.now() - cacheTimestamp < CACHE_TTL_MS
   )
@@ -118,9 +124,9 @@ const EMPTY: CostingsData = {
   error: null,
 }
 
-export function useCostings(enabled: boolean): CostingsData {
+export function useCostings(enabled: boolean, pricingSource: PricingSource = 'merged'): CostingsData {
   const [data, setData] = useState<CostingsData>(
-    enabled && isCacheValid()
+    enabled && isCacheValid(pricingSource)
       ? {
           models: cachedModels!,
           gpuCloudRates: cachedCloudRates!,
@@ -142,7 +148,7 @@ export function useCostings(enabled: boolean): CostingsData {
       return
     }
 
-    if (isCacheValid()) {
+    if (isCacheValid(pricingSource)) {
       setData({
         models: cachedModels!,
         gpuCloudRates: cachedCloudRates!,
@@ -156,13 +162,16 @@ export function useCostings(enabled: boolean): CostingsData {
       return
     }
 
-    // Deduplicate concurrent fetches
+    // Source changed (or cache stale) — show the loading state while refetching.
+    setData(prev => ({ ...prev, isLoading: true, error: null }))
+
+    // Deduplicate concurrent fetches for the same source.
     if (!fetchPromise) {
       fetchPromise = (async () => {
         const [modelsRes, systemsRes, healthRes] = await Promise.all([
-          fetch(`${AICOSTINGS_API_URL}/models`),
-          fetch(`${AICOSTINGS_API_URL}/systems?include=cloud,hardware`),
-          fetch(`${AICOSTINGS_API_URL}/health`),
+          fetch(`/api/costings/models?source=${pricingSource}`),
+          fetch('/api/costings/systems?include=cloud,hardware'),
+          fetch('/api/costings/health'),
         ])
 
         if (!modelsRes.ok) throw new Error(`/models ${modelsRes.status}`)
@@ -180,6 +189,7 @@ export function useCostings(enabled: boolean): CostingsData {
         cachedHealth = healthData as CostingsHealth | null
         cachedModelsUpdatedAt = modelsData.updated_at ?? null
         cachedModelsStale = modelsData.stale ?? false
+        cachedSource = pricingSource
         cacheTimestamp = Date.now()
       })()
     }
@@ -212,7 +222,7 @@ export function useCostings(enabled: boolean): CostingsData {
       })
 
     return () => { cancelled = true }
-  }, [enabled])
+  }, [enabled, pricingSource])
 
   return data
 }
