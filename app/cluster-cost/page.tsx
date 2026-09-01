@@ -482,8 +482,8 @@ function LayerViz({
 
 // Main component
 export default function ClusterCostPage() {
-  const { costingsEnabled, preferredCloudProvider } = useSettings()
-  const costings = useCostings(costingsEnabled)
+  const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings()
+  const costings = useCostings(costingsEnabled, pricingSource)
 
   const DEFAULT_CLUSTER = (): Cluster => ({
     id: Date.now(),

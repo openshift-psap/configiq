@@ -45,18 +45,28 @@ export default function GpuExplorerPage() {
   const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
   const costings = useCostings(costingsEnabled, pricingSource);
 
-  // Cost axes/preset are only meaningful once live hardware costs have loaded;
-  // without them the 'price' axis is all zeros, so cost controls stay gated on
-  // both costings being enabled AND hardware costs being available.
-  const hasHardwareCosts = costings.gpuHardwareCosts.size > 0;
-  const costMetricsReady = costingsEnabled && hasHardwareCosts;
-
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  // If costings is turned off while a price axis (or the cost-efficiency preset)
-  // is active, fall back to safe defaults so the chart never shows an empty axis.
+  const filteredGPUs = gpuOptions.filter(gpu => {
+    if (vendorFilter === 'all') return true;
+    return gpu.vendor === vendorFilter;
+  });
+
+  // Cost axes/preset are only meaningful once live hardware costs have loaded
+  // for the GPUs actually on screen; otherwise the 'price' axis is an all-zero
+  // column. Evaluate coverage over the current vendor-filtered set, not the
+  // global cost map, so e.g. filtering to a vendor with no priced GPUs disables
+  // the cost controls rather than plotting them all at zero.
+  const hasHardwareCosts = filteredGPUs.some(
+    gpu => (costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd ?? 0) > 0,
+  );
+  const costMetricsReady = costingsEnabled && hasHardwareCosts;
+
+  // If cost metrics become unavailable (costings off, or the displayed GPUs have
+  // no hardware costs) while a price axis or the cost-efficiency preset is
+  // active, fall back to safe defaults so the chart never shows an empty axis.
   React.useEffect(() => {
     if (!costMetricsReady) {
       if (preset === 'cost-efficiency') setPreset('balanced');
@@ -64,11 +74,6 @@ export default function GpuExplorerPage() {
       setYAxis(prev => (prev === 'price' ? 'throughput-index' : prev));
     }
   }, [costMetricsReady, preset]);
-
-  const filteredGPUs = gpuOptions.filter(gpu => {
-    if (vendorFilter === 'all') return true;
-    return gpu.vendor === vendorFilter;
-  });
 
   const calculateThroughputIndex = (gpu: GpuOption) => {
     const multiplier = ARCH_MULTIPLIER[gpu.architecture ?? ''] ?? 1.0;

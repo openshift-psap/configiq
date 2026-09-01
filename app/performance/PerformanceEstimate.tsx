@@ -1438,16 +1438,25 @@ export default function QuickEstimate() {
                 )}
               </div>
 
-              {/* Savings label — only meaningful when both cloud and self-hosted
-                  costs are known. */}
-              {catalogGpuForPricing && (
-              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '8px', height: '8px', background: '#3d7317', borderRadius: '2px' }}></div>
-                <span style={{ fontSize: '13px', fontFamily: 'var(--font-display)', fontWeight: 600, color: '#3d7317' }}>
-                  Self-hosted saves ${(((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) - (catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR)) / 1000).toFixed(1)}K/mo
-                </span>
-              </div>
-              )}
+              {/* Cost-difference label — only meaningful when both cloud and
+                  self-hosted costs are known. Names whichever option is cheaper
+                  rather than always claiming self-hosted "saves" (which would show
+                  a negative saving when self-hosted is the pricier option). */}
+              {catalogGpuForPricing && (() => {
+                const cloudMonthly = Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH
+                const selfHostedMonthly = (catalogGpuForPricing.hardware_cost_usd * Math.round(gpus)) / AMORT_MONTHS_5YR
+                const diff = cloudMonthly - selfHostedMonthly
+                const cheaper = diff >= 0 ? 'Self-hosted' : 'Cloud'
+                const color = diff >= 0 ? '#3d7317' : '#8250df'
+                return (
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', background: color, borderRadius: '2px' }}></div>
+                    <span style={{ fontSize: '13px', fontFamily: 'var(--font-display)', fontWeight: 600, color }}>
+                      {cheaper} saves ${(Math.abs(diff) / 1000).toFixed(1)}K/mo
+                    </span>
+                  </div>
+                )
+              })()}
             </>
           }
           back={
@@ -1815,11 +1824,11 @@ export default function QuickEstimate() {
         <Button variant="secondary" onClick={handleCopyCLICommand} isDisabled={!testResult}>
           Copy CLI command
         </Button>
-        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult}>
+        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult || !catalogGpuForPricing}>
           Export to Sheets
         </Button>
         <span className={styles.footerSpacer} />
-        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult}>
+        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult || !catalogGpuForPricing}>
           Save estimate{savedCount > 0 && ` (${savedCount})`}
         </Button>
       </div>
