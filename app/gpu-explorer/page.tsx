@@ -1,10 +1,8 @@
 "use client";
 
-// TODO: Replace GPU_CATALOG with useAicCatalog() — vram, mem_bw, bf16_tflops, tdp_watts, and
-// gpus_per_node will all come from /systems?include=specs once bandwidth + TFLOPs are exposed.
-// TODO: Wire Costings REST API (to be designed) to restore cost-related axes and bubble-size
-// metric. All cost fields (hardware_cost_usd, tokens_per_dollar, pricePerHour) are disabled
-// until then.
+// Cost-related axes (hardware cost) and the cost-efficiency bubble-size metric are
+// driven by the costings API via useCostings, gated on the costingsEnabled setting.
+// Cloud pricing per provider is applied on the Sources page selection.
 
 import * as React from 'react';
 import {
@@ -51,6 +49,16 @@ export default function GpuExplorerPage() {
     setMounted(true);
   }, []);
 
+  // If costings is turned off while a price axis (or the cost-efficiency preset)
+  // is active, fall back to safe defaults so the chart never shows an empty axis.
+  React.useEffect(() => {
+    if (!costingsEnabled) {
+      if (preset === 'cost-efficiency') setPreset('balanced');
+      setXAxis(prev => (prev === 'price' ? 'vram' : prev));
+      setYAxis(prev => (prev === 'price' ? 'throughput-index' : prev));
+    }
+  }, [costingsEnabled, preset]);
+
   const filteredGPUs = gpuOptions.filter(gpu => {
     if (vendorFilter === 'all') return true;
     return gpu.vendor === vendorFilter;
@@ -61,6 +69,16 @@ export default function GpuExplorerPage() {
     const bwGbps = (gpu.bandwidthTbps ?? 0) * 1000;
     const vram = gpu.vramGb ?? 0;
     return bwGbps * multiplier * (vram / 80);
+  };
+
+  // Relative cost-efficiency metric: throughput index per $1k of hardware cost.
+  // Uses live hardware costs from the costings API; 0 when no cost is known so
+  // the bubble falls back to a minimum radius rather than skewing the scale.
+  const hasHardwareCosts = costings.gpuHardwareCosts.size > 0;
+  const throughputPerKUsd = (gpu: GpuOption): number => {
+    const hw = costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd;
+    if (!hw || hw <= 0) return 0;
+    return calculateThroughputIndex(gpu) / (hw / 1000);
   };
 
   const getAxisValue = (gpu: GpuOption, axis: XAxis | YAxis): number => {
@@ -114,12 +132,15 @@ export default function GpuExplorerPage() {
   const allData = filteredGPUs.map(gpu => ({
     x: getAxisValue(gpu, xAxis),
     y: getAxisValue(gpu, yAxis),
-    size: gpu.tflopsBf16 ?? 0, // tokens_per_dollar disabled pending Costings REST API
+    // When costings is enabled and hardware costs are loaded, bubble size shows
+    // throughput per $1k of hardware cost; otherwise it falls back to BF16 TFLOPs.
+    size: costingsEnabled && hasHardwareCosts ? throughputPerKUsd(gpu) : (gpu.tflopsBf16 ?? 0),
     name: gpu.label.replace(/NVIDIA |AMD /i, ''),
     fullName: gpu.label,
     color: gpu.vendor === 'amd' ? '#c55a5a' : '#5b9bd5',
     vram: gpu.vramGb ?? 0,
-    // hwCost and tokensPerDollar omitted — restore from Costings REST API once available
+    hwCost: costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd ?? undefined,
+    tokensPerDollar: throughputPerKUsd(gpu),
     memBW: (gpu.bandwidthTbps ?? 0) * 1000,
     architecture: gpu.architecture
       ? gpu.architecture.charAt(0).toUpperCase() + gpu.architecture.slice(1)
@@ -144,8 +165,8 @@ export default function GpuExplorerPage() {
                   Preset:
                 </Text>
                 <ToggleGroup>
-                  <ToggleGroupItem text="Balanced" isSelected={preset === 'balanced'} onChange={() => setPreset('balanced')} isDisabled />
-                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled />
+                  <ToggleGroupItem text="Balanced" isSelected={preset === 'balanced'} onChange={() => setPreset('balanced')} />
+                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled={!costingsEnabled} />
                   <ToggleGroupItem text="Performance" isSelected={preset === 'performance'} onChange={() => setPreset('performance')} />
                 </ToggleGroup>
               </FlexItem>
@@ -240,7 +261,9 @@ export default function GpuExplorerPage() {
                       💡 <strong>Top-right = high VRAM and throughput.</strong> These GPUs handle larger models and longer contexts.
                     </Text>
                     <Text component="p" style={{ display: 'block', marginBottom: '8px', color: '#3c3f42', fontSize: '13px', lineHeight: '1.6' }}>
-                      <strong>Bubble size</strong> represents BF16 TFLOPs. Cost efficiency axes and tokens-per-dollar will be restored once the Costings API is available.
+                      <strong>Bubble size</strong> represents {costingsEnabled && hasHardwareCosts
+                        ? 'throughput index per $1k of hardware cost (a relative cost-efficiency metric)'
+                        : 'BF16 TFLOPs'}.
                     </Text>
                     <Text component="p" style={{ display: 'block', marginBottom: '8px', color: '#3c3f42', fontSize: '13px', lineHeight: '1.6' }}>
                       <strong>Throughput Index</strong> is a planning metric derived from memory bandwidth, VRAM, and architecture generation.
@@ -250,7 +273,9 @@ export default function GpuExplorerPage() {
                       <strong>Inference performance</strong> depends on model architecture (GQA vs MHA), sequence length, batching, and inference backend (vLLM, TensorRT-LLM, etc.).
                     </Text>
                     <Text component="p" style={{ display: 'block', color: '#6a6e73', fontSize: '13px', lineHeight: '1.6' }}>
-                      <strong>Hardware cost and cloud pricing</strong> axes are pending the Costings REST API.
+                      {costingsEnabled
+                        ? <><strong>Hardware cost</strong> axes and cost efficiency use live data from the costings API. Enable a cloud provider on the Sources page for cloud rates.</>
+                        : <><strong>Hardware cost and cost efficiency</strong> axes appear when costings is enabled in Settings.</>}
                     </Text>
                   </CardBody>
                 </Card>
