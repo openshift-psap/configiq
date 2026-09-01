@@ -4,9 +4,22 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import ComingSoonRibbon from '@/components/ComingSoonRibbon/ComingSoonRibbon'
 import styles from './cluster-cost.module.css'
 import { fetchAllProviders, getEffectiveRate, loadUserOverrides, setUserOverride, clearUserOverride, loadSelectedGpus, saveSelectedGpu, type Provider } from '@/lib/pricing/providerPricing'
+import { useCostings, type CostingsData } from '@/lib/hooks/useCostings'
+import { useSettings } from '@/contexts/SettingsContext'
 
-// GPU Catalog - matches reference exactly
-const GPU_CATALOG = [
+interface GpuCatalogEntry {
+  id: string
+  label: string
+  rate: number
+  price: number
+  tdpW: number
+  mem: number
+}
+
+// GPU Catalog - matches reference exactly. rate (cloud $/hr) and price (hardware
+// $) are the built-in fallbacks; when costings is enabled they are overridden
+// per-GPU from live data (see buildEffectiveCatalog).
+const GPU_CATALOG: GpuCatalogEntry[] = [
   { id: 'h200',    label: 'H200 141GB',   rate: 4.50, price: 42000, tdpW: 1000, mem: 141 },
   { id: 'h100',    label: 'H100 80GB',    rate: 3.89, price: 32000, tdpW: 700,  mem: 80  },
   { id: 'a100_80', label: 'A100 80GB',    rate: 3.20, price: 14000, tdpW: 400,  mem: 80  },
@@ -14,6 +27,51 @@ const GPU_CATALOG = [
   { id: 'l40s',    label: 'L40S 48GB',    rate: 2.60, price: 8500,  tdpW: 350,  mem: 48  },
   { id: 'mi300x',  label: 'MI300X 192GB', rate: 4.20, price: 38000, tdpW: 750,  mem: 192 },
 ]
+
+// Maps a cluster-cost catalog id to the aicostings/aiconfigurator systemId used
+// by useCostings. Only ids with a confident 1:1 match are listed; a GPU with no
+// entry (a100_40 40GB, mi300x — not in the costings hardware seed) keeps its
+// built-in fallback values.
+const CATALOG_TO_SYSTEM_ID: Record<string, string> = {
+  h200:    'h200_sxm',
+  h100:    'h100_sxm',
+  a100_80: 'a100_sxm',
+  l40s:    'l40s',
+}
+
+// Pick a cloud $/hr for a systemId: the preferred provider.region on_demand rate
+// when set and present, otherwise the cheapest on_demand across all providers.
+function pickCloudRate(
+  rates: Record<string, { on_demand: number | null }> | undefined,
+  preferred: string | null,
+): number | null {
+  if (!rates) return null
+  if (preferred && rates[preferred]?.on_demand != null) return rates[preferred]!.on_demand
+  const onDemand = Object.values(rates).map(r => r.on_demand).filter((v): v is number => v != null)
+  return onDemand.length > 0 ? Math.min(...onDemand) : null
+}
+
+// Overlay live hardware costs and cloud rates onto the built-in catalog. Any
+// field with no live data falls back to the hardcoded value, so the page still
+// works when costings is disabled or a GPU/rate is missing.
+function buildEffectiveCatalog(
+  costings: CostingsData,
+  enabled: boolean,
+  preferredCloudProvider: string | null,
+): GpuCatalogEntry[] {
+  if (!enabled) return GPU_CATALOG
+  return GPU_CATALOG.map(g => {
+    const sysId = CATALOG_TO_SYSTEM_ID[g.id]
+    if (!sysId) return g
+    const hw = costings.gpuHardwareCosts.get(sysId)?.new_usd
+    const rate = pickCloudRate(costings.gpuCloudRates.get(sysId), preferredCloudProvider)
+    return {
+      ...g,
+      price: hw != null ? hw : g.price,
+      rate: rate != null ? rate : g.rate,
+    }
+  })
+}
 
 // Backend defaults - all rates come from here
 const BACKEND_DEFAULTS = {
@@ -100,7 +158,8 @@ function calcCloud(
   licMonthly: number,
   dr: boolean,
   rates: typeof BACKEND_DEFAULTS,
-  activeGpuRate = 0
+  activeGpuRate = 0,
+  catalog: GpuCatalogEntry[] = GPU_CATALOG
 ): CalcResult {
   let gpuCostTotal = 0
   let totalGPUs = 0
@@ -115,7 +174,7 @@ function calcCloud(
     let gpuCost = 0
     let ngpus = 0
     cl.nodeGroups.forEach(ng => {
-      const g = GPU_CATALOG.find(x => x.id === ng.gpuType) || GPU_CATALOG[1]
+      const g = catalog.find(x => x.id === ng.gpuType) || catalog[1]
       const rate = activeGpuRate > 0 ? activeGpuRate : g.rate
       gpuCost += ng.count * rate * 720
       ngpus += ng.count
@@ -139,7 +198,7 @@ function calcCloud(
   const avgRate = totalGPUs > 0
     ? clusters.reduce((s, cl) =>
         s + cl.nodeGroups.reduce((ss, ng) => {
-          const g = GPU_CATALOG.find(x => x.id === ng.gpuType) || GPU_CATALOG[1]
+          const g = catalog.find(x => x.id === ng.gpuType) || catalog[1]
           return ss + ng.count * g.rate
         }, 0), 0) / totalGPUs
     : 0
@@ -173,7 +232,8 @@ function calcOnPrem(
   clusters: Cluster[],
   licMonthly: number,
   dr: boolean,
-  rates: typeof BACKEND_DEFAULTS
+  rates: typeof BACKEND_DEFAULTS,
+  catalog: GpuCatalogEntry[] = GPU_CATALOG
 ): CalcResult {
   let gpuAmortTotal = 0
   let powerTotal = 0
@@ -194,7 +254,7 @@ function calcOnPrem(
     let ngpus = 0
 
     cl.nodeGroups.forEach(ng => {
-      const g = GPU_CATALOG.find(x => x.id === ng.gpuType) || GPU_CATALOG[1]
+      const g = catalog.find(x => x.id === ng.gpuType) || catalog[1]
       gpuAmort += ng.count * g.price / (r.deprYrs * 12)
       gpuCapex += ng.count * g.price
       gpuPow += ng.count * g.tdpW
@@ -429,6 +489,9 @@ function LayerViz({
 
 // Main component
 export default function ClusterCostPage() {
+  const { costingsEnabled, preferredCloudProvider } = useSettings()
+  const costings = useCostings(costingsEnabled)
+
   const DEFAULT_CLUSTER = (): Cluster => ({
     id: Date.now(),
     name: 'Cluster 1',
@@ -574,11 +637,20 @@ export default function ClusterCostPage() {
   const activeGpu = selectedGpus[activeProviderId] || activeProvider?.gpus[0]?.model || ''
   const activeGpuRate = activeProvider ? getEffectiveRate(activeProviderId, activeGpu, providers, priceOverrides) : null
 
-  const cloud = useMemo(
-    () => calcCloud(clusters, licCloud, dr, rates, activeGpuRate || 0),
-    [clusters, licCloud, dr, rates, activeGpuRate]
+  // Live hardware/cloud pricing overlays the built-in catalog when costings is on.
+  const effectiveCatalog = useMemo(
+    () => buildEffectiveCatalog(costings, costingsEnabled, preferredCloudProvider),
+    [costings, costingsEnabled, preferredCloudProvider]
   )
-  const onprem = useMemo(() => calcOnPrem(clusters, licOnPrem, dr, rates), [clusters, licOnPrem, dr, rates])
+
+  const cloud = useMemo(
+    () => calcCloud(clusters, licCloud, dr, rates, activeGpuRate || 0, effectiveCatalog),
+    [clusters, licCloud, dr, rates, activeGpuRate, effectiveCatalog]
+  )
+  const onprem = useMemo(
+    () => calcOnPrem(clusters, licOnPrem, dr, rates, effectiveCatalog),
+    [clusters, licOnPrem, dr, rates, effectiveCatalog]
+  )
 
   useParticles(cloudRef, cloud.breakdown)
   useParticles(onpremRef, onprem.breakdown)
@@ -794,7 +866,7 @@ export default function ClusterCostPage() {
                   {cl.nodeGroups.map((ng, i) => (
                     <div key={i} className={styles.ngRow}>
                       <select className={styles.ngSel} value={ng.gpuType} onChange={e => upNG(cl.id, i, 'gpuType', e.target.value)}>
-                        {GPU_CATALOG.map(g => (
+                        {effectiveCatalog.map(g => (
                           <option key={g.id} value={g.id}>
                             {g.label}
                           </option>
@@ -1186,10 +1258,10 @@ export default function ClusterCostPage() {
                 </div>
               ))}
               <div className={styles.rateGroup}>🖥 On-prem GPU prices (CAPEX $)</div>
-              {GPU_CATALOG.map(g => (
+              {effectiveCatalog.map(g => (
                 <div key={g.id} className={styles.rateRow}>
                   <span className={styles.rateK}>{g.label}</span>
-                  <input className={styles.rateIn} type="number" defaultValue={g.price} style={{ width: '100%' }} />
+                  <input className={styles.rateIn} type="number" value={Math.round(g.price)} readOnly style={{ width: '100%' }} />
                   <span className={styles.rateU}>$</span>
                   <span />
                 </div>
