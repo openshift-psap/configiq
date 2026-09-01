@@ -59,7 +59,7 @@ configiq = { path = "../configiq-py", editable = true }
 # the aiconfigurator/aiconfigurator-core pins in [project.dependencies].
 [tool.uv]
 find-links = [
-    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+ce6a0fff",
+    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+5b0ee59e",
 ]
 
 [tool.pytest.ini_options]

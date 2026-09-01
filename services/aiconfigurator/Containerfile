@@ -29,7 +29,7 @@ ENV PYTHONUNBUFFERED=1 \
 # always resolve; the rolling deploy-api-latest tag has served incompatible
 # builds (an unpinned rebuild once backtracked to 0.1.1). Bump this in lockstep
 # with the version pins in pyproject.toml when moving to a newer SDK.
-ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+ce6a0fff
+ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+5b0ee59e
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \

@@ -75,7 +75,7 @@ GitHub Release assets — not PyPI. The version is **pinned** because the rollin
 `deploy-api-latest` feed has served incompatible builds; an unpinned resolve once
 silently backtracked to `0.1.1` and broke the wrapper's imports. To move to a new
 SDK build, update all of these in lockstep (currently `0.11.0` /
-`deploy-api-v0.11.0+ce6a0fff`):
+`deploy-api-v0.11.0+5b0ee59e`):
 
 1. The `aiconfigurator==` / `aiconfigurator-core==` pins in
    `services/aiconfigurator/pyproject.toml` **and** `services/aicostings/pyproject.toml`.
