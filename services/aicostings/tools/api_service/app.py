@@ -101,19 +101,24 @@ async def job_scrape_models() -> None:
     logger.info("Scraping hosted model pricing (OpenRouter + LiteLLM)...")
     start = time.monotonic()
     async with aiohttp.ClientSession() as session:
-        models, source_errors = await scrape_all_models(session)
-    if models:
-        store.set_models(models)
+        catalogs, source_errors = await scrape_all_models(session)
+    # Store each source's catalog separately (openrouter/litellm/merged) so the
+    # /models endpoint can serve one feed or the merged view. Skip empties so a
+    # failed source doesn't clobber its last-good data.
+    for source, catalog in catalogs.items():
+        if catalog:
+            store.set_models(catalog, source=source)
     for source, error in source_errors.items():
         if error is None:
             store._mark_scrape(source)
         else:
             store.set_scrape_error(source, str(error))
+    merged = catalogs.get("merged", [])
     error_count = sum(1 for e in source_errors.values() if e is not None)
-    logger.info("Stored %d models (%d source errors)", len(models), error_count)
+    logger.info("Stored %d models (%d source errors)", len(merged), error_count)
     # Partial data is still useful, so "success" means we stored something.
-    record_scrape("models", "success" if models else "error",
-                  time.monotonic() - start, records=len(models))
+    record_scrape("models", "success" if merged else "error",
+                  time.monotonic() - start, records=len(merged))
 
 
 async def job_scrape_cloud_rates() -> None:
@@ -246,27 +251,53 @@ def _stale_flag(source: str, max_age_seconds: int = 25 * 3600) -> bool:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
+_MODEL_SOURCES = ("merged", "openrouter", "litellm")
+
+
 @app.get("/models")
-def get_models():
+def get_models(
+    source: str = Query(
+        default="merged",
+        examples=["merged", "openrouter", "litellm"],
+        description="Pricing source: merged (default), openrouter, or litellm.",
+    ),
+):
     """List hosted LLM API pricing ($/M tokens).
 
     Includes both proprietary frontier models (Claude, GPT, Gemini) and
     open-weight models available via inference APIs (Llama, Qwen, Mistral,
-    DeepSeek). Sourced from OpenRouter (primary) and LiteLLM (gap-fill).
+    DeepSeek). OpenRouter and LiteLLM are peer feeds; every model is tagged with
+    its `source`. Use ?source= to select a single feed or the default merged
+    view (a union keyed by model id, with curated overrides applied as
+    field-level patches).
     """
-    models = store.get_models()
+    source = source.lower()
+    if source not in _MODEL_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid source '{source}'; expected one of {', '.join(_MODEL_SOURCES)}",
+        )
+
+    models = store.get_models(source)
     if models is None:
-        return JSONResponse({"models": [], "stale": True, "updated_at": None}, status_code=200)
+        return JSONResponse(
+            {"models": [], "source": source, "stale": True, "updated_at": None},
+            status_code=200,
+        )
 
     scrape_times = store.get_scrape_times()
-    # stale only if both sources are stale (partial data is still useful)
-    or_stale = _stale_flag("models.openrouter")
-    lt_stale = _stale_flag("models.litellm")
-    updated_at = scrape_times.get("models.openrouter") or scrape_times.get("models.litellm")
+    if source == "merged":
+        # merged is fresh if either feed is fresh (partial data is still useful)
+        stale = _stale_flag("models.openrouter") and _stale_flag("models.litellm")
+        updated_at = scrape_times.get("models.openrouter") or scrape_times.get("models.litellm")
+    else:
+        stale = _stale_flag(f"models.{source}")
+        updated_at = scrape_times.get(f"models.{source}")
     return {
         "models": models,
+        "source": source,
         "updated_at": updated_at,
-        "stale": or_stale and lt_stale,
+        "stale": stale,
     }
 
 

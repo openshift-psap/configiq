@@ -74,6 +74,42 @@ class TestGetModels:
         assert data["models"] == []
         assert data["stale"] is True
 
+    @pytest.mark.asyncio
+    async def test_default_source_is_merged(self, seed_data):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/models")
+        assert resp.json()["source"] == "merged"
+
+    @pytest.mark.asyncio
+    async def test_source_selects_feed(self):
+        store.set_models([
+            {"id": "anthropic/claude-x", "name": "Claude X", "provider": "Anthropic",
+             "tier": "balanced", "price_per_m_input": 3.0, "price_per_m_output": 15.0,
+             "context_window": 200000, "source": "openrouter"},
+        ], source="openrouter")
+        store.set_models([
+            {"id": "meta-llama/llama-9", "name": "llama-9", "provider": "Meta",
+             "tier": "balanced", "price_per_m_input": 0.2, "price_per_m_output": 0.3,
+             "context_window": 128000, "source": "litellm"},
+        ], source="litellm")
+        store._mark_scrape("models.openrouter")
+        store._mark_scrape("models.litellm")
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            or_resp = await client.get("/models?source=openrouter")
+            lt_resp = await client.get("/models?source=litellm")
+
+        assert or_resp.json()["source"] == "openrouter"
+        assert [m["id"] for m in or_resp.json()["models"]] == ["anthropic/claude-x"]
+        assert or_resp.json()["models"][0]["source"] == "openrouter"
+        assert [m["id"] for m in lt_resp.json()["models"]] == ["meta-llama/llama-9"]
+
+    @pytest.mark.asyncio
+    async def test_invalid_source_returns_400(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/models?source=bogus")
+        assert resp.status_code == 400
+
 
 class TestGetSystems:
     @pytest.mark.asyncio

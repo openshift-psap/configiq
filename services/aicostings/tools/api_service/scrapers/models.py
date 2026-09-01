@@ -2,9 +2,19 @@
 
 """Hosted LLM API pricing scrapers.
 
-Primary source:  OpenRouter API  (https://openrouter.ai/api/v1/models)
-Secondary source: LiteLLM Catalog API (https://api.litellm.ai/model_catalog)
-Curated YAML overrides for any models missing from both.
+Two peer pricing sources, plus a curated override layer. Every model carries a
+`source` field so consumers can trace where a price came from and filter by it:
+  - OpenRouter API      (https://openrouter.ai/api/v1/models)  source="openrouter"
+  - LiteLLM Catalog API (https://api.litellm.ai/model_catalog) source="litellm"
+  - Curated YAML overrides                                     source="override"
+
+scrape_all_models() returns each source's catalog separately alongside a
+`merged` view. The merged view is a union keyed by model id; on a duplicate id
+the precedence is curated overrides > OpenRouter > LiteLLM. Overrides are
+applied as *field-level patches*: an override overlays only the fields it
+specifies onto the matching scraped record (so unspecified fields keep tracking
+the live feeds), and an override for an id neither feed has is a full add. The
+/models endpoint serves any single source or the merged view via ?source=.
 """
 
 from __future__ import annotations
@@ -79,6 +89,7 @@ def _parse_openrouter_model(m: dict[str, Any]) -> dict[str, Any] | None:
         "price_per_m_input": round(price_per_m_input, 4),
         "price_per_m_output": round(price_per_m_output, 4),
         "context_window": m.get("context_length"),
+        "source": "openrouter",
     }
 
 
@@ -143,6 +154,7 @@ def _parse_litellm_model(m: dict[str, Any]) -> dict[str, Any] | None:
         "price_per_m_input": round(price_per_m_input, 4),
         "price_per_m_output": round(price_per_m_output, 4),
         "context_window": m.get("max_input_tokens"),
+        "source": "litellm",
     }
 
 
@@ -177,14 +189,19 @@ async def fetch_litellm_models(session: aiohttp.ClientSession) -> list[dict[str,
     return parsed
 
 
-ModelScrapeResult = tuple[list[dict[str, Any]], dict[str, Exception | None]]
+# catalogs keyed by source ("openrouter", "litellm", "merged"); each value is a
+# model list. errors maps the scrape source name → Exception (or None).
+ModelScrapeResult = tuple[dict[str, list[dict[str, Any]]], dict[str, Exception | None]]
 
 
 async def scrape_all_models(session: aiohttp.ClientSession) -> ModelScrapeResult:
-    """Scrape model pricing from OpenRouter and LiteLLM concurrently.
+    """Scrape model pricing from OpenRouter and LiteLLM (peer sources).
 
     Returns:
-        merged: deduplicated model list (OpenRouter primary, LiteLLM fills gaps)
+        catalogs: {"openrouter": [...], "litellm": [...], "merged": [...]} —
+            each model tagged with its `source`. The merged view is a union
+            keyed by id (precedence: overrides > OpenRouter > LiteLLM), with
+            curated overrides applied as field-level patches.
         errors: mapping of source name → Exception (or None if successful)
     """
     import asyncio
@@ -209,19 +226,30 @@ async def scrape_all_models(session: aiohttp.ClientSession) -> ModelScrapeResult
             errors[source] = e
 
     overrides = load_curated_overrides()
-    override_ids = {m["id"] for m in overrides}
 
-    # OpenRouter is primary; LiteLLM fills gaps; overrides win over both
-    or_ids = {m["id"] for m in or_models}
-    lt_gap_models = [m for m in lt_models if m["id"] not in or_ids and m["id"] not in override_ids]
+    # Merged view: union keyed by id. LiteLLM first, then OpenRouter overwrites
+    # on collision (OpenRouter wins over LiteLLM), then curated overrides win
+    # over both — applied as field-level patches so an override overlays only the
+    # fields it specifies and unspecified fields keep tracking the live feeds. An
+    # override whose id neither feed has is a full add.
+    merged_by_id: dict[str, dict[str, Any]] = {}
+    for m in lt_models:
+        merged_by_id[m["id"]] = m
+    for m in or_models:
+        merged_by_id[m["id"]] = m
+    for o in overrides:
+        oid = o.get("id")
+        if not oid:
+            continue
+        base = merged_by_id.get(oid)
+        patched = {**base, **o} if base else dict(o)
+        patched["source"] = "override"
+        merged_by_id[oid] = patched
 
-    merged = [m for m in or_models if m["id"] not in override_ids]
-    merged.extend(lt_gap_models)
-    merged.extend(overrides)
-    merged.sort(key=lambda m: m["id"])
+    merged = sorted(merged_by_id.values(), key=lambda m: m["id"])
 
     logger.info(
-        "Models merged: %d total (OpenRouter: %d, LiteLLM gaps: %d, overrides: %d)",
-        len(merged), len(or_models), len(lt_gap_models), len(overrides),
+        "Models merged: %d total (OpenRouter: %d, LiteLLM: %d, overrides: %d)",
+        len(merged), len(or_models), len(lt_models), len(overrides),
     )
-    return merged, errors
+    return {"openrouter": or_models, "litellm": lt_models, "merged": merged}, errors

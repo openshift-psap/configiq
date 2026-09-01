@@ -23,9 +23,12 @@ TTL_HARDWARE = 7 * 24 * 3600    # 7 days
 TTL_GPU_ID_MAPPING = 30 * 24 * 3600  # 30 days
 
 # Keys
-KEY_MODELS = "models"
 KEY_HEALTH = "health"
 KEY_GPU_ID_MAPPING = "gpu-id-mapping"
+
+
+def _key_models(source: str) -> str:
+    return f"models:{source}"
 
 
 def _key_cloud(system_id: str) -> str:
@@ -68,11 +71,11 @@ class ValkeyStore:
 
     # ── Models ────────────────────────────────────────────────────────────
 
-    def set_models(self, models: list[dict[str, Any]]) -> None:
-        self.client.setex(KEY_MODELS, TTL_MODELS, json.dumps(models))
+    def set_models(self, models: list[dict[str, Any]], source: str = "merged") -> None:
+        self.client.setex(_key_models(source), TTL_MODELS, json.dumps(models))
 
-    def get_models(self) -> list[dict[str, Any]] | None:
-        raw = self.client.get(KEY_MODELS)
+    def get_models(self, source: str = "merged") -> list[dict[str, Any]] | None:
+        raw = self.client.get(_key_models(source))
         return json.loads(raw) if raw else None
 
     # ── Cloud rates ───────────────────────────────────────────────────────
