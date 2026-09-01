@@ -11,9 +11,11 @@ import pytest
 
 from tools.api_service.scrapers.cloud_rates import (
     _aws_gpu_instance_types,
+    _aws_scrape_region,
     _merge_records,
     active_scrapers,
     load_gpu_id_mapping,
+    scrape_aws,
     scrape_azure,
     scrape_vastai,
 )
@@ -318,6 +320,84 @@ class TestAwsInstanceTypes:
             "A100 80GB": "a100_sxm",
         }
         assert _aws_gpu_instance_types(mapping) == {"p5.48xlarge", "p4d.24xlarge"}
+
+
+class _AsyncByteReader:
+    """Minimal async file-like over bytes for ijson.parse_async (mimics aiohttp
+    StreamReader.read(n))."""
+
+    def __init__(self, data: bytes):
+        self._data = data
+        self._pos = 0
+
+    async def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            chunk = self._data[self._pos:]
+            self._pos = len(self._data)
+        else:
+            chunk = self._data[self._pos:self._pos + n]
+            self._pos += len(chunk)
+        return chunk
+
+
+class TestAwsScrapeRegion:
+    """Regression tests for the AWS Price List OnDemand parser.
+
+    The fixture reproduces AWS's real *composite dotted* term/rate keys
+    (`<sku>.<offerTermCode>` and `<sku>.<offerTermCode>.<rateCode>`), which
+    previously defeated the fixed-length prefix check and silently yielded zero
+    records — the reason AWS never appeared in the Sources cloud-provider list.
+    """
+
+    def _fixture_bytes(self) -> bytes:
+        return (FIXTURES_DIR / "aws_ec2_offer_sample.json").read_bytes()
+
+    def _session_for(self, data: bytes) -> MagicMock:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.content = _AsyncByteReader(data)
+
+        @asynccontextmanager
+        async def mock_get(*args, **kwargs):
+            yield mock_response
+
+        session = MagicMock()
+        session.get = mock_get
+        return session
+
+    @pytest.mark.asyncio
+    async def test_extracts_ondemand_price_from_composite_keys(self):
+        session = self._session_for(self._fixture_bytes())
+        records = await _aws_scrape_region(
+            session, "us-east-1", "http://x", {"p4d.24xlarge"}, {"p4d.24xlarge": "a100_sxm"},
+        )
+        # Only the Shared+Linux+Used+NA SKU is priced; Windows and Dedicated are
+        # filtered out at the product stage, so exactly one on-demand record.
+        assert records == [{
+            "system_id": "a100_sxm",
+            "provider_region": "aws.us-east-1",
+            "on_demand": 32.7726,
+            "spot_median": None,
+        }]
+
+    @pytest.mark.asyncio
+    async def test_scrape_aws_raises_when_no_records(self, monkeypatch):
+        # A product file with no matching SKUs must raise (not return []), so a
+        # silently-empty scrape surfaces in /health instead of a fresh success.
+        empty = json.dumps({"products": {}, "terms": {"OnDemand": {}}}).encode()
+        session = self._session_for(empty)
+
+        async def fake_urls(_session):
+            return {"us-east-1": "http://x"}
+
+        monkeypatch.setattr(
+            "tools.api_service.scrapers.cloud_rates._aws_region_file_urls", fake_urls,
+        )
+        monkeypatch.setattr(
+            "tools.api_service.scrapers.cloud_rates.AWS_PRICING_REGIONS", ["us-east-1"],
+        )
+        with pytest.raises(RuntimeError, match="no rate records"):
+            await scrape_aws(session, {"p4d.24xlarge": "a100_sxm"})
 
 
 _KEY_VARS = ["RUNPOD_API_KEY", "LAMBDA_API_KEY", "GCP_BILLING_API_KEY",

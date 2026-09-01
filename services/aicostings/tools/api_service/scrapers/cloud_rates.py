@@ -149,6 +149,13 @@ async def _aws_scrape_region(
     attributes at a time (they arrive contiguously), keep the SKUs that match a
     GPU instance type + standard Linux/Shared/Used/NA terms, then pick up their
     on-demand USD/hr in the same single pass.
+
+    NOTE: the OnDemand term/rate keys are *composite and contain dots* — e.g.
+    `terms.OnDemand.<sku>.<sku>.<offerTermCode>.priceDimensions.<sku>.<offerTermCode>.<rateCode>.pricePerUnit.USD`
+    — so the USD leaf's dotted prefix has a variable component count and cannot
+    be matched by a fixed `len(parts)`/positional check. The SKU token itself
+    never contains a dot, so we take it as the third path component and match the
+    USD leaf by suffix instead.
     """
     matched_skus: dict[str, str] = {}  # sku -> instance_type
     seen: set[str] = set()             # (system_id, region) already recorded
@@ -184,20 +191,19 @@ async def _aws_scrape_region(
                 if cur_sku is not None:
                     finalize(cur_sku, cur_attrs)
                     cur_sku, cur_attrs = None, {}
-                parts = prefix.split(".")
-                # terms.OnDemand.<sku>.<term>.priceDimensions.<pd>.pricePerUnit.USD
-                if (
-                    len(parts) == 8 and event == "string"
-                    and parts[4] == "priceDimensions" and parts[6] == "pricePerUnit" and parts[7] == "USD"
-                    and parts[2] in matched_skus
-                ):
+                # Match the USD leaf by suffix; the SKU is always the 3rd path
+                # component (it has no dots) even though later term/rate keys do.
+                if event == "string" and prefix.endswith(".pricePerUnit.USD"):
+                    sku = prefix.split(".", 3)[2]  # terms . OnDemand . <sku> . …
+                    if sku not in matched_skus:
+                        continue
                     try:
                         usd = float(value)
                     except (TypeError, ValueError):
                         continue
                     if usd <= 0:
                         continue
-                    system_id = _map_gpu_name(matched_skus[parts[2]], mapping)
+                    system_id = _map_gpu_name(matched_skus[sku], mapping)
                     if not system_id or (system_id, region) in seen:
                         continue
                     seen.add((system_id, region))
@@ -225,6 +231,17 @@ async def scrape_aws(session: aiohttp.ClientSession, mapping: dict[str, str]) ->
         region_records = await _aws_scrape_region(session, region, url, want_types, mapping)
         records.extend(region_records)
         logger.info("AWS %s: %d GPU rate records", region, len(region_records))
+    # We map real, widely-available instance types (p4d/p5), so a completely
+    # empty result means the parse silently matched nothing — almost certainly a
+    # Price List schema change. Propagate it as an error (matching Azure's
+    # raise-on-total-failure contract) so /health surfaces it instead of
+    # recording a misleading "fresh" success with no data.
+    if not records:
+        raise RuntimeError(
+            f"AWS scrape produced no rate records for {len(want_types)} GPU instance "
+            f"type(s) across region(s) {AWS_PRICING_REGIONS}; the Price List schema may "
+            "have changed"
+        )
     logger.info("AWS: %d rate records across %d region(s)", len(records), len(AWS_PRICING_REGIONS))
     return records
 
