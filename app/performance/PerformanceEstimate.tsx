@@ -33,7 +33,7 @@ import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { useSettings } from '@/contexts/SettingsContext';
-import { useCostings } from '@/lib/hooks/useCostings';
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import type { InferenceConfigResult } from '@/lib/gpu-math/inference-config';
@@ -505,11 +505,15 @@ export default function QuickEstimate() {
                         gpuLabel.includes('L40S') ? 'L40S' :
                         gpuLabel.includes('MI300X') ? 'MI300X' : gpuLabel;
 
-  const cloudRatesForGpu = costings.gpuCloudRates.get(gpu)
-  const preferredRate = preferredCloudProvider && cloudRatesForGpu
-    ? (cloudRatesForGpu[preferredCloudProvider]?.on_demand ?? null)
-    : null
-  const gpuPricePerHour: number | null = preferredRate ?? livePricing[gpuPricingKey] ?? null;
+  // Resolve a cloud $/hr from the costings API (preferred provider → cheapest
+  // on-demand → cheapest spot), falling back to the legacy live-pricing worker.
+  const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpu), preferredCloudProvider)
+  const workerRate = livePricing[gpuPricingKey] ?? null
+  const gpuPricePerHour: number | null = resolvedCloudRate?.rate ?? workerRate;
+  // Honest label for where the rate came from — never assume a provider.
+  const cloudRateLabel = resolvedCloudRate
+    ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
+    : (workerRate != null ? 'live rate' : '');
 
   const realMonthlyCost = testResult && gpuPricePerHour != null ?
     realGpuCount * gpuPricePerHour * HOURS_PER_MONTH :
@@ -1397,7 +1401,7 @@ export default function QuickEstimate() {
                     ${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) / 1000).toFixed(1)}K/mo
                   </div>
                   <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#3c3f42' }}>
-                    AWS · ${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH * AMORT_MONTHS_5YR) / 1000).toFixed(0)}K over 5yr
+                    {cloudRateLabel && `${cloudRateLabel} · `}${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH * AMORT_MONTHS_5YR) / 1000).toFixed(0)}K over 5yr
                   </div>
                 </div>
 

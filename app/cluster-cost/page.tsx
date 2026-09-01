@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import ComingSoonRibbon from '@/components/ComingSoonRibbon/ComingSoonRibbon'
 import styles from './cluster-cost.module.css'
 import { fetchAllProviders, getEffectiveRate, loadUserOverrides, setUserOverride, clearUserOverride, loadSelectedGpus, saveSelectedGpu, type Provider } from '@/lib/pricing/providerPricing'
-import { useCostings, type CostingsData } from '@/lib/hooks/useCostings'
+import { useCostings, resolveCloudRate, type CostingsData } from '@/lib/hooks/useCostings'
 import { useSettings } from '@/contexts/SettingsContext'
 
 interface GpuCatalogEntry {
@@ -39,21 +39,10 @@ const CATALOG_TO_SYSTEM_ID: Record<string, string> = {
   l40s:    'l40s',
 }
 
-// Pick a cloud $/hr for a systemId: the preferred provider.region on_demand rate
-// when set and present, otherwise the cheapest on_demand across all providers.
-function pickCloudRate(
-  rates: Record<string, { on_demand: number | null }> | undefined,
-  preferred: string | null,
-): number | null {
-  if (!rates) return null
-  if (preferred && rates[preferred]?.on_demand != null) return rates[preferred]!.on_demand
-  const onDemand = Object.values(rates).map(r => r.on_demand).filter((v): v is number => v != null)
-  return onDemand.length > 0 ? Math.min(...onDemand) : null
-}
-
 // Overlay live hardware costs and cloud rates onto the built-in catalog. Any
 // field with no live data falls back to the hardcoded value, so the page still
-// works when costings is disabled or a GPU/rate is missing.
+// works when costings is disabled or a GPU/rate is missing. Cloud rate uses the
+// shared resolver (preferred provider → cheapest on-demand → cheapest spot).
 function buildEffectiveCatalog(
   costings: CostingsData,
   enabled: boolean,
@@ -64,7 +53,7 @@ function buildEffectiveCatalog(
     const sysId = CATALOG_TO_SYSTEM_ID[g.id]
     if (!sysId) return g
     const hw = costings.gpuHardwareCosts.get(sysId)?.new_usd
-    const rate = pickCloudRate(costings.gpuCloudRates.get(sysId), preferredCloudProvider)
+    const rate = resolveCloudRate(costings.gpuCloudRates.get(sysId), preferredCloudProvider)?.rate ?? null
     return {
       ...g,
       price: hw != null ? hw : g.price,

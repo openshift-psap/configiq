@@ -5,7 +5,7 @@ import { Switch, FormSelect, FormSelectOption } from '@patternfly/react-core'
 import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
 import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
-import { useCostings } from '@/lib/hooks/useCostings'
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings'
 import { useSettings } from '@/contexts/SettingsContext'
 import { DEFAULT_TIERS } from '@/lib/routing/tier-defaults'
 import { type TierState, computeAllTiers, computeCostVolumePoints, findBreakeven } from '@/lib/routing/calc'
@@ -100,12 +100,11 @@ export default function RoutingEconomics() {
   const getRate = React.useCallback(
     (gpuId: string): number | null => {
       if (mode === 'cloud') {
-        // Prefer aicostings rate for the selected provider.region
-        if (preferredCloudProvider && costings.gpuCloudRates.size > 0) {
-          const rates = costings.gpuCloudRates.get(gpuId)
-          if (rates && rates[preferredCloudProvider]) {
-            return rates[preferredCloudProvider].on_demand
-          }
+        // Prefer an aicostings rate (preferred provider → cheapest on-demand →
+        // cheapest spot); fall back to the legacy live-pricing worker.
+        if (costings.gpuCloudRates.size > 0) {
+          const resolved = resolveCloudRate(costings.gpuCloudRates.get(gpuId), preferredCloudProvider)
+          if (resolved) return resolved.rate
         }
         return getCloudRate(gpuId, livePricing)
       }

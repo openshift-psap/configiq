@@ -59,6 +59,44 @@ export interface CostingsData {
   error: string | null
 }
 
+// A single cloud rate chosen for a GPU, tagged with where it came from and
+// whether it is an on-demand or spot price, so callers can label it honestly.
+export interface ResolvedCloudRate {
+  rate: number
+  provider: string // provider.region key, e.g. "aws.us-east-1"
+  kind: 'on_demand' | 'spot'
+}
+
+// Pick a single representative cloud $/hr for a GPU from its per-provider rates.
+// Preference order: the preferred provider's on-demand (then its spot), then the
+// cheapest on-demand across all providers, then the cheapest spot. Returns null
+// when no provider publishes any usable rate. Spot is only used as a fallback so
+// callers can surface that it is not an on-demand price.
+export function resolveCloudRate(
+  cloudRates: Record<string, CloudRates> | undefined,
+  preferredProvider?: string | null,
+): ResolvedCloudRate | null {
+  if (!cloudRates) return null
+
+  if (preferredProvider) {
+    const pr = cloudRates[preferredProvider]
+    if (pr?.on_demand != null) return { rate: pr.on_demand, provider: preferredProvider, kind: 'on_demand' }
+    if (pr?.spot_median != null) return { rate: pr.spot_median, provider: preferredProvider, kind: 'spot' }
+  }
+
+  let cheapestOnDemand: ResolvedCloudRate | null = null
+  let cheapestSpot: ResolvedCloudRate | null = null
+  for (const [provider, r] of Object.entries(cloudRates)) {
+    if (r.on_demand != null && (cheapestOnDemand == null || r.on_demand < cheapestOnDemand.rate)) {
+      cheapestOnDemand = { rate: r.on_demand, provider, kind: 'on_demand' }
+    }
+    if (r.spot_median != null && (cheapestSpot == null || r.spot_median < cheapestSpot.rate)) {
+      cheapestSpot = { rate: r.spot_median, provider, kind: 'spot' }
+    }
+  }
+  return cheapestOnDemand ?? cheapestSpot
+}
+
 // ── Module-level cache ─────────────────────────────────────────────────────
 // Survives re-renders and navigation; 1-hour TTL.
 

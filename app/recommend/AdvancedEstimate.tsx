@@ -18,7 +18,7 @@ import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
-import { useCostings } from '@/lib/hooks/useCostings';
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import { ModelInput } from '@/components/ui/ModelInput';
@@ -137,7 +137,7 @@ function friendlyErrorHint(code: string | null): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdvancedEstimate() {
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled, pricingSource } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled, pricingSource, preferredCloudProvider } = useSettings();
   const costings = useCostings(costingsEnabled, pricingSource);
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
@@ -311,11 +311,20 @@ export default function AdvancedEstimate() {
   const tpsVal = useCountUp(result?.throughput.tokensPerSecond ?? 0, 750, 0);
   const memVal = useCountUp(result?.memory.value ?? 0, 750, 1);
 
-  // Cost calculations
+  // Cost calculations. Prefer a live cloud rate from the costings API (same
+  // resolver the Performance page uses), then the legacy pricing worker, then an
+  // amortized hardware cost so a GPU with a known price still shows an estimate.
   const gpuShortName = (currentGpuOption?.label ?? '').replace(/NVIDIA\s+/i, '').replace(/AMD\s+/i, '').split(' ')[0];
   const livePrice = livePricing[gpuShortName];
   const hwCost = costings.gpuHardwareCosts.get(gpuSystem)?.new_usd ?? null;
-  const pricePerHour = livePrice ?? (hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null);
+  const amortizedHwPerHour = hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null;
+  const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpuSystem), preferredCloudProvider);
+  const pricePerHour = resolvedCloudRate?.rate ?? livePrice ?? amortizedHwPerHour ?? null;
+  const rateBasis = resolvedCloudRate
+    ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
+    : livePrice != null ? 'live rate'
+    : amortizedHwPerHour != null ? 'amortized hardware'
+    : '';
   const numGpus = result?.recommendation.totalGpus ?? 0;
   const monthlyCost = pricePerHour != null ? numGpus * pricePerHour * HOURS_PER_MONTH : null;
 
@@ -625,7 +634,7 @@ export default function AdvancedEstimate() {
                       ${Math.round(monthlyCost).toLocaleString()}<span className={styles.tileUnit}>/mo</span>
                     </span>
                     <span className={styles.tileSub}>
-                      {numGpus} × ${pricePerHour.toFixed(2)}/hr{livePrice != null ? ' · live rate' : ' · amortized hardware'}
+                      {numGpus} × ${pricePerHour.toFixed(2)}/hr{rateBasis && ` · ${rateBasis}`}
                     </span>
                   </>
                 }
