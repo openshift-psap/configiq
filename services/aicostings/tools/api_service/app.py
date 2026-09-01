@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .scrapers.cloud_rates import scrape_all_cloud_rates
+from .scrapers.cloud_rates import active_scrapers, scrape_all_cloud_rates
 from .scrapers.hardware_costs import load_hardware_costs
 from .scrapers.models import LITELLM_URL, OPENROUTER_URL, scrape_all_models
 from .valkey import ValkeyStore
@@ -184,7 +184,13 @@ async def lifespan(app: FastAPI):
     # serving stale/empty data until the next scheduled tick.
     if store.get_models() is None or (_stale_flag("models.openrouter") and _stale_flag("models.litellm")):
         await job_scrape_models()
-    if not store.get_all_cloud_rates() or _stale_flag("cloud.azure"):
+    # Re-scrape if cloud rate data is missing, or if ANY active provider is stale
+    # or has never succeeded. Keying on a single provider (previously azure) hid
+    # the case where one provider is broken while others are fresh: e.g. a
+    # never-succeeded provider has no scrape marker, so _stale_flag() is True and
+    # a restart re-scrapes it instead of waiting up to 24h for the next tick.
+    cloud_sources = [f"cloud.{name}" for name, _ in active_scrapers()]
+    if not store.get_all_cloud_rates() or any(_stale_flag(s) for s in cloud_sources):
         await job_scrape_cloud_rates()
     if not store.get_all_hardware_costs() or store.is_stale("hardware_costs", 7 * 24 * 3600):
         await job_load_hardware_costs()
