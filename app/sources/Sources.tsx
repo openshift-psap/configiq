@@ -107,15 +107,24 @@ export default function Sources() {
     }
   }, [preferredCloudProvider]);
 
-  // Per-source model provenance counts (present when source=merged).
-  const modelSourceCounts = React.useMemo(() => {
-    const counts: Record<string, number> = {};
+  // Model count per feed, shown against each selectable source. Accumulated
+  // across fetches (union with prior values) so a feed's count survives
+  // switching to another source, which only loads that one feed's models. The
+  // 'merged' total is only trustworthy when the merged feed is loaded (it alone
+  // carries every source's models), so it is updated only then.
+  const [feedCounts, setFeedCounts] = React.useState<Record<string, number>>({});
+  React.useEffect(() => {
+    if (costings.models.length === 0) return;
+    const perSource: Record<string, number> = {};
     for (const m of costings.models) {
-      const key = m.source ?? 'unknown';
-      counts[key] = (counts[key] ?? 0) + 1;
+      if (m.source) perSource[m.source] = (perSource[m.source] ?? 0) + 1;
     }
-    return counts;
-  }, [costings.models]);
+    setFeedCounts(prev => {
+      const next = { ...prev, ...perSource };
+      if (pricingSource === 'merged') next.merged = costings.models.length;
+      return next;
+    });
+  }, [costings.models, pricingSource]);
 
   // Available model pricing feeds, served by the API (id + label + description
   // + scrape URL). Fetched once when costings is enabled; the API is the single
@@ -327,6 +336,11 @@ export default function Sources() {
               >
                 <span className={styles.providerDot} />
                 {opt.label}
+                {feedCounts[opt.id] != null && (
+                  <span className={styles.feedCount}>
+                    ({feedCounts[opt.id].toLocaleString()} models)
+                  </span>
+                )}
                 {opt.url && (
                   <a
                     href={opt.url}
@@ -340,15 +354,6 @@ export default function Sources() {
                   </a>
                 )}
               </button>
-            ))}
-          </div>
-        )}
-        {pricingSource === 'merged' && Object.keys(modelSourceCounts).length > 0 && (
-          <div style={{ padding: '0 20px 16px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {Object.entries(modelSourceCounts).sort(([a], [b]) => a.localeCompare(b)).map(([src, count]) => (
-              <span key={src} className={styles.sourceCount} style={{ margin: 0 }}>
-                {src}: {count}
-              </span>
             ))}
           </div>
         )}

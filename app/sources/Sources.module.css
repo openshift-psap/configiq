@@ -269,11 +269,11 @@
   margin-top: 4px;
 }
 
-/* Model pricing source selector */
-.sourceCount {
+/* Model count shown against each pricing feed option */
+.feedCount {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--gc-text-2);
-  margin-left: auto;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
