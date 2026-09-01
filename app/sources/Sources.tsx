@@ -16,6 +16,16 @@ interface ModelSourceOption {
   url: string | null;
 }
 
+// Safe default shown only when /sources is unavailable. 'merged' is always a
+// valid ?source= value, so the selector stays usable without hardcoding the
+// real feed list (which /sources owns when reachable).
+const MERGED_FALLBACK: ModelSourceOption = {
+  id: 'merged',
+  label: 'Merged',
+  description: 'All feeds, deduplicated by model id with curated overrides applied',
+  url: null,
+};
+
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
@@ -93,8 +103,15 @@ export default function Sources() {
     let cancelled = false;
     fetch('/api/costings/sources')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => { if (!cancelled) setSourceOptions((d.sources ?? []) as ModelSourceOption[]); })
-      .catch(() => {});
+      .then(d => {
+        if (cancelled) return;
+        const opts = (d.sources ?? []) as ModelSourceOption[];
+        setSourceOptions(opts.length > 0 ? opts : [MERGED_FALLBACK]);
+      })
+      // /sources may be unavailable (e.g. an older aicostings deployment). Fall
+      // back to the always-valid merged default so the selector stays usable
+      // rather than hanging on "discovering feeds".
+      .catch(() => { if (!cancelled) setSourceOptions([MERGED_FALLBACK]); });
     return () => { cancelled = true; };
   }, [costingsEnabled]);
 
