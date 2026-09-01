@@ -36,21 +36,16 @@ docker run --rm -p 7860:7860 aiconfigurator
 curl http://localhost:7860/systems
 ```
 
-By default the image installs the latest SDK wheels from the fork's rolling
-`deploy-api-latest` release. Pin a specific build with:
-
-```bash
-docker build --platform linux/amd64 \
-  -f services/aiconfigurator/Containerfile -t aiconfigurator \
-  --build-arg AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+<sha> \
-  services/
-```
+The aiconfigurator SDK wheels are pinned in `pyproject.toml` by exact
+fork-release download URL (the `aiconfigurator @ …` / `aiconfigurator-core @ …`
+entries), so the image always installs those exact artifacts — no build args. To
+move to a newer SDK build, update those URLs; see
+[docs/RELEASE_PROCESS.md](../../docs/RELEASE_PROCESS.md#bumping-the-aiconfigurator-sdk).
 
 ## Local development
 
-No versions or platforms are pinned in `pyproject.toml`; the SDK wheels are
-resolved from the fork's release assets via `[tool.uv] find-links`. On a
-`linux/amd64` host:
+The `aiconfigurator-core` wheel pinned in `pyproject.toml` is amd64-only, so this
+works on a `linux/amd64` host:
 
 ```bash
 cd services/aiconfigurator

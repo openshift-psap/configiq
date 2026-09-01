@@ -8,8 +8,8 @@
 # Unlike the aiconfigurator monorepo's Containerfile (a multi-stage Rust/maturin
 # wheel *builder*), this image just installs the already-published aiconfigurator
 # SDK wheels from the Red Hat fork's GitHub Releases and layers the thin FastAPI
-# wrapper (plus the shared configiq package) on top. Bump the SDK by re-pointing
-# AIC_WHEELS_URL at a different release tag; no version is pinned here.
+# wrapper (plus the shared configiq package) on top. The SDK wheel URLs are
+# pinned in pyproject.toml; bump them there to move to a newer SDK.
 
 FROM python:3.12-slim
 
@@ -24,13 +24,6 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:${PATH}
 
-# GitHub Release that hosts the aiconfigurator / aiconfigurator-core wheels.
-# Pinned to an immutable per-build release so the 0.11.0 pins in pyproject.toml
-# always resolve; the rolling deploy-api-latest tag has served incompatible
-# builds (an unpinned rebuild once backtracked to 0.1.1). Bump this in lockstep
-# with the version pins in pyproject.toml when moving to a newer SDK.
-ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+5b0ee59e
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -44,12 +37,12 @@ COPY configiq-py /src/configiq-py
 RUN /opt/venv/bin/pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
 
 # Runtime deps, read from pyproject.toml (single source of truth) by the shared
-# installer — incl. the aiconfigurator SDK + its Rust-compiled core, resolved as
-# wheels from the fork's release assets via --find-links. Copy pyproject.toml
+# installer — incl. the aiconfigurator SDK + its Rust-compiled core, which
+# pyproject.toml references by exact fork-release wheel URL. Copy pyproject.toml
 # alone first so this layer only rebuilds when the deps change. `python` here is
 # the venv's (PATH=/opt/venv/bin), so pip installs into /opt/venv.
 COPY scripts/install-deps.py aiconfigurator/pyproject.toml /tmp/
-RUN python /tmp/install-deps.py /tmp/pyproject.toml --find-links "${AIC_WHEELS_URL}"
+RUN python /tmp/install-deps.py /tmp/pyproject.toml
 
 # Thin REST wrapper. CMD imports it as api_service.app:app.
 COPY aiconfigurator/tools/api_service /app/api_service

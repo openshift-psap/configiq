@@ -22,13 +22,6 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# GitHub Release that hosts the aiconfigurator / aiconfigurator-core wheels.
-# Pinned to an immutable per-build release so the 0.11.0 pins in pyproject.toml
-# always resolve; the rolling deploy-api-latest tag has served incompatible
-# builds (an unpinned rebuild once backtracked to 0.1.1). Bump this in lockstep
-# with the version pins in pyproject.toml when moving to a newer SDK.
-ARG AIC_WHEELS_URL=https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+5b0ee59e
-
 # Shared ConfigIQ library, with the observability + MCP extras so /metrics,
 # tracing, and the MCP server light up in the deployed container.
 COPY configiq-py /src/configiq-py
@@ -36,12 +29,12 @@ RUN pip install --no-cache-dir "/src/configiq-py[otel,mcp]"
 
 # Service runtime deps, read from pyproject.toml (single source of truth) by the
 # shared installer. Copy pyproject.toml alone first so this layer only rebuilds
-# when the deps change, not on every source edit. --find-links resolves the
-# aiconfigurator SDK wheels from the RH fork — source of the GPU system catalog
-# and vendor display names via configiq.systems, with pyarrow reading the SDK's
-# bundled perf-data parquet.
+# when the deps change, not on every source edit. pyproject.toml references the
+# aiconfigurator SDK wheels by exact fork-release URL — source of the GPU system
+# catalog and vendor display names via configiq.systems, with pyarrow reading the
+# SDK's bundled perf-data parquet.
 COPY scripts/install-deps.py aicostings/pyproject.toml /tmp/
-RUN python /tmp/install-deps.py /tmp/pyproject.toml --find-links "${AIC_WHEELS_URL}"
+RUN python /tmp/install-deps.py /tmp/pyproject.toml
 
 # Service source. The app reads bundled YAML from data/ and uses relative
 # imports, so it runs from the source tree at /app (python -m tools.api_service.app).

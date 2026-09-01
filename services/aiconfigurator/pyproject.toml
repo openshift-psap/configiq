@@ -14,14 +14,15 @@ dependencies = [
     "pyarrow",
     # Shared ConfigIQ utilities (GPU systems catalog, observability, MCP wiring).
     "configiq",
-    # aiconfigurator SDK + its Rust-compiled core, consumed as wheels published
-    # by the Red Hat fork (see [tool.uv] find-links below and the Containerfile).
-    # Not vendored as source into this repo. Pinned to 0.11.0: the wrapper targets
-    # that SDK's API (e.g. aiconfigurator.cli.api) and the rolling wheel feed has
-    # served incompatible builds — unpinned resolution once silently backtracked
-    # to 0.1.1, breaking the import. Bump this in lockstep with find-links below.
-    "aiconfigurator==0.11.0",
-    "aiconfigurator-core==0.11.0",
+    # aiconfigurator SDK + its Rust-compiled core, consumed as wheels published by
+    # the Red Hat fork's GitHub Release — NOT vendored as source. Referenced by
+    # exact download URL (not name==version) on purpose: NVIDIA publishes the same
+    # 0.11.0 on PyPI with an incompatible numpy~=1.26.4 pin that would otherwise
+    # shadow the fork's numpy>=2.1,<3 build and make resolution impossible. A direct
+    # URL forces pip to install these exact artifacts. Bump both URLs together (the
+    # version + build hash live in the tag) for a new SDK; see docs/RELEASE_PROCESS.md.
+    "aiconfigurator @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator-0.11.0-py3-none-any.whl",
+    "aiconfigurator-core @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator_core-0.11.0-cp311-abi3-manylinux_2_28_x86_64.whl",
     "plotext>=5.3.2,<6",
 ]
 
@@ -46,16 +47,6 @@ dev = [
 # from ./configiq-py before this service.
 [tool.uv.sources]
 configiq = { path = "../configiq-py", editable = true }
-
-# The aiconfigurator SDK wheels are published as GitHub Release assets by the
-# Red Hat fork, not on PyPI. Point at an immutable per-build release (not the
-# rolling deploy-api-latest) so the pinned 0.11.0 wheels above always resolve;
-# the rolling tag has served incompatible builds. Bump this tag together with
-# the aiconfigurator/aiconfigurator-core pins in [project.dependencies].
-[tool.uv]
-find-links = [
-    "https://github.com/redhat-performance/aiconfigurator/releases/expanded_assets/deploy-api-v0.11.0+5b0ee59e",
-]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

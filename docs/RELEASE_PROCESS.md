@@ -71,19 +71,23 @@ Published containers:
 
 The `aiconfigurator` and `aicostings` services install the `aiconfigurator` SDK
 (and its Rust-compiled `aiconfigurator-core`) as wheels from the Red Hat fork's
-GitHub Release assets — not PyPI. The version is **pinned** because the rolling
-`deploy-api-latest` feed has served incompatible builds; an unpinned resolve once
-silently backtracked to `0.1.1` and broke the wrapper's imports. To move to a new
-SDK build, update all of these in lockstep (currently `0.11.0` /
-`deploy-api-v0.11.0+5b0ee59e`):
+GitHub Release assets — not PyPI. They are referenced by **exact download URL**
+rather than `name==version`, because NVIDIA publishes the same `0.11.0` on PyPI
+with an incompatible `numpy~=1.26.4` pin that would otherwise shadow the fork's
+`numpy>=2.1,<3` build and make the install unresolvable. A direct URL forces pip
+to install the exact fork artifacts regardless of what PyPI serves.
 
-1. The `aiconfigurator==` / `aiconfigurator-core==` pins in
-   `services/aiconfigurator/pyproject.toml` **and** `services/aicostings/pyproject.toml`.
-2. The `[tool.uv] find-links` immutable release URL in both of those `pyproject.toml` files.
-3. The `AIC_WHEELS_URL` `ARG` default in both services' `Containerfile`.
+To move to a new SDK build, update the two wheel URLs — keep them **identical in
+both files** — in lockstep:
 
-Pick a specific `deploy-api-v<version>+<hash>` release (never the rolling
-`deploy-api-latest`) so rebuilds are reproducible.
+1. `services/aiconfigurator/pyproject.toml` — the `aiconfigurator @ …` and
+   `aiconfigurator-core @ …` entries in `[project.dependencies]`.
+2. `services/aicostings/pyproject.toml` — the same two entries.
+
+Each URL points at a specific `deploy-api-v<version>+<hash>` release asset (the
+`+` in the tag is URL-encoded as `%2B`); never the rolling `deploy-api-latest`,
+so rebuilds are reproducible. The wheels are produced by the fork's
+`deploy-api-wheels.yml` workflow on its `deploy/api` branch.
 
 ## Deployment
 
