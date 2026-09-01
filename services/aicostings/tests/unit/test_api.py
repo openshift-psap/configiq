@@ -111,6 +111,37 @@ class TestGetModels:
         assert resp.status_code == 400
 
 
+class TestGetSources:
+    @pytest.mark.asyncio
+    async def test_lists_feeds_with_metadata(self):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/sources")
+        assert resp.status_code == 200
+        sources = resp.json()["sources"]
+        ids = [s["id"] for s in sources]
+        assert ids[0] == "merged"  # synthetic default listed first
+        assert "openrouter" in ids
+        assert "litellm" in ids
+        for s in sources:
+            assert s["label"]
+            assert s["description"]
+            assert "url" in s  # present for every source (None for merged)
+        by_id = {s["id"]: s for s in sources}
+        assert by_id["merged"]["url"] is None
+        assert by_id["openrouter"]["url"]  # real feeds carry their scrape URL
+        assert by_id["litellm"]["url"]
+
+    @pytest.mark.asyncio
+    async def test_ids_match_accepted_model_sources(self):
+        # Every advertised source id must be accepted by /models, and any other
+        # id rejected — /sources is the single source of truth for the selector.
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            ids = [s["id"] for s in (await client.get("/sources")).json()["sources"]]
+            for sid in ids:
+                assert (await client.get(f"/models?source={sid}")).status_code == 200
+            assert (await client.get("/models?source=bogus")).status_code == 400
+
+
 class TestGetSystems:
     @pytest.mark.asyncio
     async def test_base_returns_id_and_name(self, seed_data):

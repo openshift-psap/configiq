@@ -136,6 +136,15 @@
   flex-shrink: 0;
 }
 
+.sourceLink {
+  margin-left: 4px;
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1;
+}
+.sourceLink:hover { text-decoration: underline; }
+
 .emptyState {
   padding: 32px 20px;
   text-align: center;

@@ -2,16 +2,19 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useSettings, type PricingSource } from '@/contexts/SettingsContext';
+import { useSettings, DEFAULT_PRICING_SOURCE } from '@/contexts/SettingsContext';
 import { useCostings, type SourceStatus } from '@/lib/hooks/useCostings';
 import { useOnPremProfile, DEFAULT_PROFILE, type OnPremCostProfile } from '@/lib/hooks/useOnPremProfile';
 import styles from './Sources.module.css';
 
-const PRICING_SOURCES: { id: PricingSource; label: string; desc: string }[] = [
-  { id: 'merged', label: 'Merged', desc: 'OpenRouter + LiteLLM, deduplicated' },
-  { id: 'openrouter', label: 'OpenRouter', desc: 'OpenRouter feed only' },
-  { id: 'litellm', label: 'LiteLLM', desc: 'LiteLLM catalog only' },
-];
+// Pricing-feed metadata, served by GET /api/costings/sources. The API owns the
+// feed list and labels, so nothing here is hardcoded per feed.
+interface ModelSourceOption {
+  id: string;
+  label: string;
+  description: string;
+  url: string | null;
+}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return '—';
@@ -78,6 +81,30 @@ export default function Sources() {
     }
     return counts;
   }, [costings.models]);
+
+  // Available model pricing feeds, served by the API (id + label + description
+  // + scrape URL). Fetched once when costings is enabled; the API is the single
+  // source of truth so a feed added or retired backend-side is reflected here
+  // with no frontend change.
+  const [sourceOptions, setSourceOptions] = React.useState<ModelSourceOption[]>([]);
+
+  React.useEffect(() => {
+    if (!costingsEnabled) return;
+    let cancelled = false;
+    fetch('/api/costings/sources')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { if (!cancelled) setSourceOptions((d.sources ?? []) as ModelSourceOption[]); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [costingsEnabled]);
+
+  // If the persisted feed is no longer offered (retired, or renamed), fall back
+  // to merged so the selector never points at a source the API will reject.
+  React.useEffect(() => {
+    if (sourceOptions.length > 0 && !sourceOptions.some(s => s.id === pricingSource)) {
+      setPricingSource(DEFAULT_PRICING_SOURCE);
+    }
+  }, [sourceOptions, pricingSource, setPricingSource]);
 
   const sortedSources = health
     ? Object.entries(health.sources).sort(([a], [b]) => a.localeCompare(b))
@@ -207,19 +234,35 @@ export default function Sources() {
             </div>
           </div>
         </div>
-        <div className={styles.providerGrid}>
-          {PRICING_SOURCES.map(s => (
-            <button
-              key={s.id}
-              className={`${styles.providerOption} ${pricingSource === s.id ? styles.providerOptionActive : ''}`}
-              onClick={() => setPricingSource(s.id)}
-              title={s.desc}
-            >
-              <span className={styles.providerDot} />
-              {s.label}
-            </button>
-          ))}
-        </div>
+        {sourceOptions.length === 0 ? (
+          <div className={styles.emptyState}>Discovering available feeds…</div>
+        ) : (
+          <div className={styles.providerGrid}>
+            {sourceOptions.map(opt => (
+              <button
+                key={opt.id}
+                className={`${styles.providerOption} ${pricingSource === opt.id ? styles.providerOptionActive : ''}`}
+                onClick={() => setPricingSource(opt.id)}
+                title={opt.description}
+              >
+                <span className={styles.providerDot} />
+                {opt.label}
+                {opt.url && (
+                  <a
+                    href={opt.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.sourceLink}
+                    title={`Scrape source: ${opt.url}`}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    ↗
+                  </a>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         {pricingSource === 'merged' && Object.keys(modelSourceCounts).length > 0 && (
           <div style={{ padding: '0 20px 16px', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {Object.entries(modelSourceCounts).sort(([a], [b]) => a.localeCompare(b)).map(([src, count]) => (

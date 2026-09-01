@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 
 from .scrapers.cloud_rates import scrape_all_cloud_rates
 from .scrapers.hardware_costs import load_hardware_costs
-from .scrapers.models import scrape_all_models
+from .scrapers.models import LITELLM_URL, OPENROUTER_URL, scrape_all_models
 from .valkey import ValkeyStore
 
 # Optional observability + MCP, provided by the shared configiq package
@@ -251,7 +251,47 @@ def _stale_flag(source: str, max_age_seconds: int = 25 * 3600) -> bool:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-_MODEL_SOURCES = ("merged", "openrouter", "litellm")
+# Hosted-model pricing feeds, with display metadata so clients don't hardcode
+# labels. 'merged' is the synthetic default (a union of all feeds, keyed by
+# model id, with curated overrides applied). This tuple is the single source of
+# truth for which ?source= values are valid — GET /sources exposes it so the
+# frontend selector is API-driven and follows feeds added or retired here.
+#
+# 'url' is the exact upstream endpoint each feed is scraped from (reused from
+# the scraper module so it can never drift), useful for diagnostics/attribution;
+# 'merged' has no single URL.
+MODEL_SOURCES: tuple[dict[str, str | None], ...] = (
+    {
+        "id": "merged",
+        "label": "Merged",
+        "description": "All feeds, deduplicated by model id with curated overrides applied",
+        "url": None,
+    },
+    {
+        "id": "openrouter",
+        "label": "OpenRouter",
+        "description": "OpenRouter pricing feed only",
+        "url": OPENROUTER_URL,
+    },
+    {
+        "id": "litellm",
+        "label": "LiteLLM",
+        "description": "LiteLLM model catalog feed only",
+        "url": LITELLM_URL,
+    },
+)
+_MODEL_SOURCE_IDS = tuple(s["id"] for s in MODEL_SOURCES)
+
+
+@app.get("/sources")
+def get_sources():
+    """List the available hosted-model pricing feeds with display metadata.
+
+    Clients use this to build the pricing-source selector instead of hardcoding
+    feed ids and labels; the list follows feeds added or retired in
+    MODEL_SOURCES with no client change.
+    """
+    return {"sources": [dict(s) for s in MODEL_SOURCES]}
 
 
 @app.get("/models")
@@ -272,10 +312,10 @@ def get_models(
     field-level patches).
     """
     source = source.lower()
-    if source not in _MODEL_SOURCES:
+    if source not in _MODEL_SOURCE_IDS:
         raise HTTPException(
             status_code=400,
-            detail=f"invalid source '{source}'; expected one of {', '.join(_MODEL_SOURCES)}",
+            detail=f"invalid source '{source}'; expected one of {', '.join(_MODEL_SOURCE_IDS)}",
         )
 
     models = store.get_models(source)

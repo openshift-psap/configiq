@@ -4,7 +4,13 @@ import * as React from 'react';
 import { loadAppConfig, getAppConfig } from '@/lib/app-config';
 
 export type InferenceBackend = 'vllm' | 'tensorrt-llm' | 'sglang';
-export type PricingSource = 'merged' | 'openrouter' | 'litellm';
+// A hosted-model pricing feed. 'merged' is the one constant the API always
+// exposes; the individual feeds (openrouter, litellm, …) are discovered at
+// runtime from /health, so this is intentionally an open string rather than a
+// closed union — new feeds appear (and retired ones disappear) with no
+// frontend change.
+export type PricingSource = string;
+export const DEFAULT_PRICING_SOURCE = 'merged';
 
 const STORAGE_KEYS = {
   defaultModel: 'settings_default_model',
@@ -60,7 +66,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [backendVersion, setBackendVersionState] = React.useState('');
   const [costingsEnabled, setCostingsEnabledState] = React.useState(false);
   const [preferredCloudProvider, setPreferredCloudProviderState] = React.useState<string | null>(null);
-  const [pricingSource, setPricingSourceState] = React.useState<PricingSource>('merged');
+  const [pricingSource, setPricingSourceState] = React.useState<PricingSource>(DEFAULT_PRICING_SOURCE);
 
   React.useEffect(() => {
     async function init() {
@@ -85,8 +91,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
       setPreferredCloudProviderState(localStorage.getItem(STORAGE_KEYS.preferredCloudProvider));
 
+      // Any non-empty string is accepted; feeds are validated at fetch time by
+      // the API (which 400s on an unknown source) and the Sources selector
+      // resets to merged if the persisted feed is no longer offered.
       const savedPricingSource = localStorage.getItem(STORAGE_KEYS.pricingSource);
-      if (savedPricingSource === 'merged' || savedPricingSource === 'openrouter' || savedPricingSource === 'litellm') {
+      if (savedPricingSource) {
         setPricingSourceState(savedPricingSource);
       }
 
