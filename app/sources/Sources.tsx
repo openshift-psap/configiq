@@ -122,6 +122,7 @@ export default function Sources() {
   // source of truth so a feed added or retired backend-side is reflected here
   // with no frontend change.
   const [sourceOptions, setSourceOptions] = React.useState<ModelSourceOption[]>([]);
+  const [sourcesFromApi, setSourcesFromApi] = React.useState(false);
 
   React.useEffect(() => {
     if (!costingsEnabled) return;
@@ -131,25 +132,63 @@ export default function Sources() {
       .then(d => {
         if (cancelled) return;
         const opts = (d.sources ?? []) as ModelSourceOption[];
-        setSourceOptions(opts.length > 0 ? opts : [MERGED_FALLBACK]);
+        if (opts.length > 0) { setSourceOptions(opts); setSourcesFromApi(true); }
       })
-      // /sources may be unavailable (e.g. an older aicostings deployment). Fall
-      // back to the always-valid merged default so the selector stays usable
-      // rather than hanging on "discovering feeds".
-      .catch(() => { if (!cancelled) setSourceOptions([MERGED_FALLBACK]); });
+      // /sources may be unavailable (an older aicostings deployment lacking the
+      // metadata endpoint). Leave the API flag false so effectiveSourceOptions
+      // derives the feed list from model provenance instead — the ?source=
+      // filter works regardless of whether /sources is deployed.
+      .catch(() => { /* fall back to provenance-derived options */ });
     return () => { cancelled = true; };
   }, [costingsEnabled]);
 
-  // If the persisted feed is no longer offered (retired, or renamed), fall back
-  // to merged so the selector never points at a source the API will reject.
+  // Feeds discovered from model provenance, accumulated so a feed stays
+  // selectable after switching away from 'merged' (a non-merged fetch only
+  // carries that one feed's models). Union-only; never shrinks within a session.
+  const [discoveredSources, setDiscoveredSources] = React.useState<string[]>([]);
   React.useEffect(() => {
-    if (sourceOptions.length > 0 && !sourceOptions.some(s => s.id === pricingSource)) {
+    const seen = costings.models.map(m => m.source).filter((s): s is NonNullable<typeof s> => s != null);
+    if (seen.length === 0) return;
+    setDiscoveredSources(prev => {
+      const union = new Set([...prev, ...seen]);
+      return union.size === prev.length ? prev : Array.from(union).sort();
+    });
+  }, [costings.models]);
+
+  // What the selector renders: the API list when reachable, otherwise 'merged'
+  // plus every feed seen in provenance, so litellm/openrouter remain selectable
+  // even when the /sources metadata endpoint is not deployed.
+  const effectiveSourceOptions = React.useMemo<ModelSourceOption[]>(() => {
+    if (sourcesFromApi && sourceOptions.length > 0) return sourceOptions;
+    const opts: ModelSourceOption[] = [MERGED_FALLBACK];
+    for (const s of discoveredSources) {
+      if (s === 'merged') continue;
+      opts.push({
+        id: s,
+        label: s.charAt(0).toUpperCase() + s.slice(1),
+        description: `Hosted model pricing from the ${s} feed`,
+        url: null,
+      });
+    }
+    return opts;
+  }, [sourcesFromApi, sourceOptions, discoveredSources]);
+
+  // Only reset against the authoritative API list; in degraded mode keep the
+  // persisted choice (the ?source= filter accepts it) so a reload before models
+  // load doesn't clobber it.
+  React.useEffect(() => {
+    if (sourcesFromApi && sourceOptions.length > 0 && !sourceOptions.some(s => s.id === pricingSource)) {
       setPricingSource(DEFAULT_PRICING_SOURCE);
     }
-  }, [sourceOptions, pricingSource, setPricingSource]);
+  }, [sourcesFromApi, sourceOptions, pricingSource, setPricingSource]);
 
+  // hardware_costs is loaded from bundled seed data, not scraped from a live
+  // feed, so it doesn't belong in the live scrape-status table (its coverage is
+  // shown by the "GPUs w/ hw cost" summary tile instead).
   const sortedSources = health
-    ? Object.entries(health.sources).sort(([a], [b]) => a.localeCompare(b))
+    ? Object.entries(health.sources)
+        .filter(([name]) => name !== 'hardware_costs')
+        .sort(([a], [b]) => a.localeCompare(b))
     : [];
 
   const staleOrErrored = sortedSources.filter(([, s]) => s.stale || s.last_error).length;
@@ -193,7 +232,6 @@ export default function Sources() {
             <div className={styles.sectionTitle}>Pricing data sources</div>
             <div className={styles.sectionDesc}>
               Live scrape status for each data source powering cost calculations.
-              {health && ` aicostings v${health.version}`}
             </div>
           </div>
         </div>
@@ -276,11 +314,11 @@ export default function Sources() {
             </div>
           </div>
         </div>
-        {sourceOptions.length === 0 ? (
+        {effectiveSourceOptions.length === 0 ? (
           <div className={styles.emptyState}>Discovering available feeds…</div>
         ) : (
           <div className={styles.providerGrid}>
-            {sourceOptions.map(opt => (
+            {effectiveSourceOptions.map(opt => (
               <button
                 key={opt.id}
                 className={`${styles.providerOption} ${pricingSource === opt.id ? styles.providerOptionActive : ''}`}
