@@ -273,7 +273,7 @@ export default function QuickEstimate() {
     // Debounce to avoid fetching while user is typing
     const timer = setTimeout(fetchConfig, 500);
     return () => clearTimeout(timer);
-  }, [model, hfToken, hydrated]);
+  }, [model, hfToken, hydrated, aicModels]);
 
   // Auto-run calculation when inputs change — calls AIC /recommend API
   React.useEffect(() => {
@@ -344,7 +344,12 @@ export default function QuickEstimate() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); clearInterval(elapsedTimer); };
-  }, [calcTrigger]); // only fire on explicit Calculate press
+    // Intentionally keyed on calcTrigger alone: the Calculate button increments
+    // it to snapshot the current inputs and fire one /recommend request. Listing
+    // the individual inputs here would auto-run the API on every keystroke, which
+    // is exactly the behaviour the explicit-Calculate flow avoids.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcTrigger]);
 
   // Fetch live pricing from Cloudflare Worker
   React.useEffect(() => {
