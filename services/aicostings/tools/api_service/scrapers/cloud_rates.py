@@ -131,7 +131,10 @@ async def _aws_region_file_urls(session: aiohttp.ClientSession) -> dict[str, str
     async with session.get(AWS_REGION_INDEX, timeout=aiohttp.ClientTimeout(total=60)) as resp:
         if resp.status != 200:
             raise RuntimeError(f"AWS region index returned {resp.status}")
-        index = await resp.json()
+        # AWS serves the Price List JSON as application/octet-stream, which
+        # aiohttp's .json() rejects by default ("unexpected mimetype"); the
+        # body is valid JSON, so skip the content-type guard.
+        index = await resp.json(content_type=None)
     regions = index.get("regions", {})
     return {code: AWS_PRICING_HOST + meta["currentVersionUrl"] for code, meta in regions.items()}
 
