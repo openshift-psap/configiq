@@ -370,8 +370,8 @@ export default function QuickEstimate() {
     };
 
     fetchPricing();
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchPricing, 5 * AMORT_MONTHS_5YR * 1000);
+    const REFRESH_MS = 5 * 60 * 1000; // refresh live pricing every 5 minutes
+    const interval = setInterval(fetchPricing, REFRESH_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -1350,7 +1350,18 @@ export default function QuickEstimate() {
           />
         </div>
 
-        {costingsEnabled && (
+        {costingsEnabled && gpuPricePerHour == null && (
+          <div style={{
+            border: '1px solid #d2d2d2', borderRadius: '6px', padding: '14px',
+            fontSize: '13px', fontFamily: 'var(--font-mono)', color: '#54585c',
+          }}>
+            <DollarSignIcon /> Cloud rate unavailable for this GPU — pick a
+            provider on the Sources page or choose a GPU with published rates to
+            see the cost comparison.
+          </div>
+        )}
+
+        {costingsEnabled && gpuPricePerHour != null && (
         <div>
           <FlipTile
             front={
