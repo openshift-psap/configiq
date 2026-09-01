@@ -102,27 +102,90 @@ export function resolveCloudRate(
 
 const CACHE_TTL_MS = 60 * 60 * 1000
 
-let cachedModels: FrontierModel[] | null = null
-let cachedCloudRates: Map<string, Record<string, CloudRates>> | null = null
-let cachedHardwareCosts: Map<string, HardwareCost> | null = null
-let cachedHealth: CostingsHealth | null = null
-let cachedModelsUpdatedAt: string | null = null
-let cachedModelsStale = false
-let cacheTimestamp: number | null = null
-// The pricing source the cache currently holds; a change invalidates it so
-// switching the source on the Sources page refetches the right feed.
+// The fully-parsed result of one fetch, so a source's data is published as a
+// single unit rather than via several shared mutable globals that could tear.
+interface CostingsResult {
+  models: FrontierModel[]
+  cloudRates: Map<string, Record<string, CloudRates>>
+  hardwareCosts: Map<string, HardwareCost>
+  health: CostingsHealth | null
+  modelsUpdatedAt: string | null
+  modelsStale: boolean
+}
+
+// Single cache slot for the source currently in use, tagged with which source
+// it holds so switching the source on the Sources page invalidates it.
+let cached: CostingsResult | null = null
 let cachedSource: PricingSource | null = null
-let fetchPromise: Promise<void> | null = null
+let cacheTimestamp: number | null = null
+
+// In-flight fetches keyed by source. Keying by source (not a single shared
+// promise) means switching the source mid-flight can never reuse another
+// source's promise or publish its data, and each entry is cleared once settled
+// so a later refetch of the same source actually runs.
+const inFlight = new Map<PricingSource, Promise<CostingsResult>>()
 
 function isCacheValid(source: PricingSource): boolean {
   return (
-    cachedModels !== null &&
-    cachedCloudRates !== null &&
-    cachedHardwareCosts !== null &&
+    cached !== null &&
     cachedSource === source &&
     cacheTimestamp !== null &&
     Date.now() - cacheTimestamp < CACHE_TTL_MS
   )
+}
+
+async function fetchCostings(source: PricingSource): Promise<CostingsResult> {
+  const [modelsRes, systemsRes, healthRes] = await Promise.all([
+    fetch(`/api/costings/models?source=${source}`),
+    fetch('/api/costings/systems?include=cloud,hardware'),
+    fetch('/api/costings/health'),
+  ])
+
+  if (!modelsRes.ok) throw new Error(`/models ${modelsRes.status}`)
+  if (!systemsRes.ok) throw new Error(`/systems ${systemsRes.status}`)
+
+  const modelsData = await modelsRes.json()
+  const systemsData = await systemsRes.json()
+  const healthData = healthRes.ok ? await healthRes.json() : null
+
+  const systems = (systemsData.systems ?? []) as Record<string, unknown>[]
+
+  return {
+    models: (modelsData.models ?? []) as FrontierModel[],
+    cloudRates: parseCloudRates(systems),
+    hardwareCosts: parseHardwareCosts(systems),
+    health: healthData as CostingsHealth | null,
+    modelsUpdatedAt: modelsData.updated_at ?? null,
+    modelsStale: modelsData.stale ?? false,
+  }
+}
+
+// Deduplicate concurrent fetches for the same source; distinct sources fetch
+// independently. The map entry is removed once the fetch settles.
+function getCostingsFetch(source: PricingSource): Promise<CostingsResult> {
+  let p = inFlight.get(source)
+  if (!p) {
+    p = fetchCostings(source)
+    inFlight.set(source, p)
+    p.then(
+      () => inFlight.delete(source),
+      () => inFlight.delete(source),
+    )
+  }
+  return p
+}
+
+function resultToData(result: CostingsResult): CostingsData {
+  return {
+    models: result.models,
+    gpuCloudRates: result.cloudRates,
+    gpuHardwareCosts: result.hardwareCosts,
+    health: result.health,
+    modelsUpdatedAt: result.modelsUpdatedAt,
+    modelsStale: result.modelsStale,
+    isLoading: false,
+    error: null,
+  }
 }
 
 function parseCloudRates(
@@ -165,16 +228,7 @@ const EMPTY: CostingsData = {
 export function useCostings(enabled: boolean, pricingSource: PricingSource = 'merged'): CostingsData {
   const [data, setData] = useState<CostingsData>(
     enabled && isCacheValid(pricingSource)
-      ? {
-          models: cachedModels!,
-          gpuCloudRates: cachedCloudRates!,
-          gpuHardwareCosts: cachedHardwareCosts!,
-          health: cachedHealth,
-          modelsUpdatedAt: cachedModelsUpdatedAt,
-          modelsStale: cachedModelsStale,
-          isLoading: false,
-          error: null,
-        }
+      ? resultToData(cached!)
       : enabled
         ? { ...EMPTY, isLoading: true }
         : EMPTY,
@@ -187,69 +241,25 @@ export function useCostings(enabled: boolean, pricingSource: PricingSource = 'me
     }
 
     if (isCacheValid(pricingSource)) {
-      setData({
-        models: cachedModels!,
-        gpuCloudRates: cachedCloudRates!,
-        gpuHardwareCosts: cachedHardwareCosts!,
-        health: cachedHealth,
-        modelsUpdatedAt: cachedModelsUpdatedAt,
-        modelsStale: cachedModelsStale,
-        isLoading: false,
-        error: null,
-      })
+      setData(resultToData(cached!))
       return
     }
 
     // Source changed (or cache stale) — show the loading state while refetching.
     setData(prev => ({ ...prev, isLoading: true, error: null }))
 
-    // Deduplicate concurrent fetches for the same source.
-    if (!fetchPromise) {
-      fetchPromise = (async () => {
-        const [modelsRes, systemsRes, healthRes] = await Promise.all([
-          fetch(`/api/costings/models?source=${pricingSource}`),
-          fetch('/api/costings/systems?include=cloud,hardware'),
-          fetch('/api/costings/health'),
-        ])
-
-        if (!modelsRes.ok) throw new Error(`/models ${modelsRes.status}`)
-        if (!systemsRes.ok) throw new Error(`/systems ${systemsRes.status}`)
-
-        const modelsData = await modelsRes.json()
-        const systemsData = await systemsRes.json()
-        const healthData = healthRes.ok ? await healthRes.json() : null
-
-        const systems = (systemsData.systems ?? []) as Record<string, unknown>[]
-
-        cachedModels = (modelsData.models ?? []) as FrontierModel[]
-        cachedCloudRates = parseCloudRates(systems)
-        cachedHardwareCosts = parseHardwareCosts(systems)
-        cachedHealth = healthData as CostingsHealth | null
-        cachedModelsUpdatedAt = modelsData.updated_at ?? null
-        cachedModelsStale = modelsData.stale ?? false
+    let cancelled = false
+    getCostingsFetch(pricingSource)
+      .then(result => {
+        // A superseded (cancelled) effect must not publish its result or clobber
+        // the cache slot now owned by the current source.
+        if (cancelled) return
+        cached = result
         cachedSource = pricingSource
         cacheTimestamp = Date.now()
-      })()
-    }
-
-    let cancelled = false
-    fetchPromise
-      .then(() => {
-        if (!cancelled) {
-          setData({
-            models: cachedModels!,
-            gpuCloudRates: cachedCloudRates!,
-            gpuHardwareCosts: cachedHardwareCosts!,
-            health: cachedHealth,
-            modelsUpdatedAt: cachedModelsUpdatedAt,
-            modelsStale: cachedModelsStale,
-            isLoading: false,
-            error: null,
-          })
-        }
+        setData(resultToData(result))
       })
       .catch((err: unknown) => {
-        fetchPromise = null
         if (!cancelled) {
           setData(prev => ({
             ...prev,

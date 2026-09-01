@@ -148,7 +148,11 @@ function calcCloud(
   dr: boolean,
   rates: typeof BACKEND_DEFAULTS,
   activeGpuRate = 0,
-  catalog: GpuCatalogEntry[] = GPU_CATALOG
+  catalog: GpuCatalogEntry[] = GPU_CATALOG,
+  // When true (costings enabled), each node group is priced at its own live
+  // per-GPU rate from the catalog rather than the single provider-picker rate,
+  // so mixed-GPU clusters price correctly and live rates actually drive the total.
+  preferCatalogRate = false
 ): CalcResult {
   let gpuCostTotal = 0
   let totalGPUs = 0
@@ -164,7 +168,7 @@ function calcCloud(
     let ngpus = 0
     cl.nodeGroups.forEach(ng => {
       const g = catalog.find(x => x.id === ng.gpuType) || catalog[1]
-      const rate = activeGpuRate > 0 ? activeGpuRate : g.rate
+      const rate = preferCatalogRate ? g.rate : (activeGpuRate > 0 ? activeGpuRate : g.rate)
       gpuCost += ng.count * rate * 720
       ngpus += ng.count
     })
@@ -633,8 +637,8 @@ export default function ClusterCostPage() {
   )
 
   const cloud = useMemo(
-    () => calcCloud(clusters, licCloud, dr, rates, activeGpuRate || 0, effectiveCatalog),
-    [clusters, licCloud, dr, rates, activeGpuRate, effectiveCatalog]
+    () => calcCloud(clusters, licCloud, dr, rates, activeGpuRate || 0, effectiveCatalog, costingsEnabled),
+    [clusters, licCloud, dr, rates, activeGpuRate, effectiveCatalog, costingsEnabled]
   )
   const onprem = useMemo(
     () => calcOnPrem(clusters, licOnPrem, dr, rates, effectiveCatalog),
@@ -758,8 +762,8 @@ export default function ClusterCostPage() {
       rows.push(['CLUSTERS', 'GPUs', 'Cloud/mo', 'Self-hosted/mo'])
       clusters.forEach(cl => {
         const gpus = cl.nodeGroups.reduce((s, ng) => s + ng.count, 0)
-        const cCloud = calcCloud([cl], 0, false, rates, activeGpuRate || 0).total
-        const cOp = calcOnPrem([cl], 0, false, rates).total
+        const cCloud = calcCloud([cl], 0, false, rates, activeGpuRate || 0, effectiveCatalog, costingsEnabled).total
+        const cOp = calcOnPrem([cl], 0, false, rates, effectiveCatalog).total
         rows.push([cl.name, gpus.toString(), '$' + Math.round(cCloud), '$' + Math.round(cOp)])
       })
       rows.push(['Grand total', totalGPUs.toString(), '$' + Math.round(cloud.total), '$' + Math.round(onprem.total)])
@@ -1440,8 +1444,8 @@ export default function ClusterCostPage() {
               <tbody>
                 {clusters.map(cl => {
                   const gpus = cl.nodeGroups.reduce((s, ng) => s + ng.count, 0)
-                  const cCloud = calcCloud([cl], 0, false, rates, activeGpuRate || 0).total
-                  const cOp = calcOnPrem([cl], 0, false, rates).total
+                  const cCloud = calcCloud([cl], 0, false, rates, activeGpuRate || 0, effectiveCatalog, costingsEnabled).total
+                  const cOp = calcOnPrem([cl], 0, false, rates, effectiveCatalog).total
                   return (
                     <tr key={cl.id}>
                       <td>{cl.name}</td>

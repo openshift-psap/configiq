@@ -1405,7 +1405,9 @@ export default function QuickEstimate() {
                   </div>
                 </div>
 
-                {/* Self-hosted pricing tile */}
+                {/* Self-hosted pricing tile — only when a hardware cost is known,
+                    otherwise a $0 tile would imply self-hosting is free. */}
+                {catalogGpuForPricing && (
                 <div style={{
                   flex: 1,
                   border: '1px solid #d2d2d2',
@@ -1427,21 +1429,25 @@ export default function QuickEstimate() {
                     <Term k="selfHosted" />
                   </div>
                   <div style={{ fontSize: '28px', fontFamily: 'var(--font-display)', fontWeight: 700, color: '#151515', marginBottom: '4px' }}>
-                    ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo
+                    ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo
                   </div>
                   <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#3c3f42' }}>
-                    5yr amort · ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K total
+                    5yr amort · ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K total
                   </div>
                 </div>
+                )}
               </div>
 
-              {/* Savings label */}
+              {/* Savings label — only meaningful when both cloud and self-hosted
+                  costs are known. */}
+              {catalogGpuForPricing && (
               <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <div style={{ width: '8px', height: '8px', background: '#3d7317', borderRadius: '2px' }}></div>
                 <span style={{ fontSize: '13px', fontFamily: 'var(--font-display)', fontWeight: 600, color: '#3d7317' }}>
-                  Self-hosted saves ${(((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) - ((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / AMORT_MONTHS_5YR)) / 1000).toFixed(1)}K/mo
+                  Self-hosted saves ${(((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) - (catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR)) / 1000).toFixed(1)}K/mo
                 </span>
               </div>
+              )}
             </>
           }
           back={
@@ -1452,14 +1458,20 @@ export default function QuickEstimate() {
                 {Math.round(gpus)} GPUs × <span className={styles.em}>${gpuPricePerHour.toFixed(2)}/gpu-hr</span> × <span className={styles.em}>730 hrs</span><br />
                 = <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) / 1000).toFixed(1)}K/mo</span><br />
                 <br />
+                {catalogGpuForPricing && (
+                <>
                 <strong style={{ color: '#3c3f42', fontSize: '12px' }}>Self-hosted:</strong><br />
-                ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K ÷ <span className={styles.em}>60 months</span><br />
-                = <span className={styles.em}>${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo</span><br />
+                ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K ÷ <span className={styles.em}>60 months</span><br />
+                = <span className={styles.em}>${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo</span><br />
                 <span style={{ fontSize: '11.5px', color: '#3c3f42' }}>(hardware amortization only)</span><br />
                 <br />
+                </>
+                )}
                 <strong style={{ color: '#3c3f42', fontSize: '12px' }}>5-year totals:</strong><br />
                 Cloud: <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH * AMORT_MONTHS_5YR) / 1000).toFixed(0)}K</span><br />
-                Hardware: <span className={styles.em}>${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K</span><br />
+                {catalogGpuForPricing && (
+                <>Hardware: <span className={styles.em}>${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K</span><br /></>
+                )}
                 <br />
                 <div style={{ background: 'rgba(255, 193, 7, 0.1)', padding: '8px', borderRadius: '4px', marginTop: '8px' }}>
                   <span style={{ fontSize: '11.5px', color: '#995c00', lineHeight: '1.5' }}>

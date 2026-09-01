@@ -45,6 +45,12 @@ export default function GpuExplorerPage() {
   const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
   const costings = useCostings(costingsEnabled, pricingSource);
 
+  // Cost axes/preset are only meaningful once live hardware costs have loaded;
+  // without them the 'price' axis is all zeros, so cost controls stay gated on
+  // both costings being enabled AND hardware costs being available.
+  const hasHardwareCosts = costings.gpuHardwareCosts.size > 0;
+  const costMetricsReady = costingsEnabled && hasHardwareCosts;
+
   React.useEffect(() => {
     setMounted(true);
   }, []);
@@ -52,12 +58,12 @@ export default function GpuExplorerPage() {
   // If costings is turned off while a price axis (or the cost-efficiency preset)
   // is active, fall back to safe defaults so the chart never shows an empty axis.
   React.useEffect(() => {
-    if (!costingsEnabled) {
+    if (!costMetricsReady) {
       if (preset === 'cost-efficiency') setPreset('balanced');
       setXAxis(prev => (prev === 'price' ? 'vram' : prev));
       setYAxis(prev => (prev === 'price' ? 'throughput-index' : prev));
     }
-  }, [costingsEnabled, preset]);
+  }, [costMetricsReady, preset]);
 
   const filteredGPUs = gpuOptions.filter(gpu => {
     if (vendorFilter === 'all') return true;
@@ -74,7 +80,6 @@ export default function GpuExplorerPage() {
   // Relative cost-efficiency metric: throughput index per $1k of hardware cost.
   // Uses live hardware costs from the costings API; 0 when no cost is known so
   // the bubble falls back to a minimum radius rather than skewing the scale.
-  const hasHardwareCosts = costings.gpuHardwareCosts.size > 0;
   const throughputPerKUsd = (gpu: GpuOption): number => {
     const hw = costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd;
     if (!hw || hw <= 0) return 0;
@@ -134,7 +139,7 @@ export default function GpuExplorerPage() {
     y: getAxisValue(gpu, yAxis),
     // When costings is enabled and hardware costs are loaded, bubble size shows
     // throughput per $1k of hardware cost; otherwise it falls back to BF16 TFLOPs.
-    size: costingsEnabled && hasHardwareCosts ? throughputPerKUsd(gpu) : (gpu.tflopsBf16 ?? 0),
+    size: costMetricsReady ? throughputPerKUsd(gpu) : (gpu.tflopsBf16 ?? 0),
     name: gpu.label.replace(/NVIDIA |AMD /i, ''),
     fullName: gpu.label,
     color: gpu.vendor === 'amd' ? '#c55a5a' : '#5b9bd5',
@@ -166,7 +171,7 @@ export default function GpuExplorerPage() {
                 </Text>
                 <ToggleGroup>
                   <ToggleGroupItem text="Balanced" isSelected={preset === 'balanced'} onChange={() => setPreset('balanced')} />
-                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled={!costingsEnabled} />
+                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled={!costMetricsReady} />
                   <ToggleGroupItem text="Performance" isSelected={preset === 'performance'} onChange={() => setPreset('performance')} />
                 </ToggleGroup>
               </FlexItem>
@@ -209,7 +214,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={xAxis === 'vram'} onChange={() => setXAxis('vram')} />
-                      {costingsEnabled && <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} />}
+                      {costMetricsReady && <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={xAxis === 'throughput-index'} onChange={() => setXAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={xAxis === 'mem-bw'} onChange={() => setXAxis('mem-bw')} />
                     </ToggleGroup>
@@ -221,7 +226,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={yAxis === 'vram'} onChange={() => setYAxis('vram')} />
-                      {costingsEnabled && <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} />}
+                      {costMetricsReady && <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={yAxis === 'throughput-index'} onChange={() => setYAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={yAxis === 'mem-bw'} onChange={() => setYAxis('mem-bw')} />
                     </ToggleGroup>

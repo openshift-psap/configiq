@@ -279,10 +279,13 @@ export function Settings() {
         </div>
         {/* ── Costings features ── */}
         <div className={styles.section}>
-          <div
+          <button
+            type="button"
             className={styles.sectionHead}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', width: '100%', background: 'none', border: 'none', font: 'inherit', textAlign: 'left' }}
             onClick={() => setCostingsOpen(o => !o)}
+            aria-expanded={costingsOpen}
+            aria-controls="costings-settings-panel"
           >
             <div>
               <div className={styles.sectionTitle}>
@@ -296,9 +299,9 @@ export function Settings() {
               </div>
             </div>
             {costingsSaved && <Label color="green" icon={<CheckCircleIcon />}>Saved</Label>}
-          </div>
+          </button>
           {costingsOpen && (
-            <div className={styles.fieldWrap}>
+            <div className={styles.fieldWrap} id="costings-settings-panel">
               <Switch
                 id="settings-costings-enabled"
                 label="Enabled"
