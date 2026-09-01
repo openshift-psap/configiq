@@ -44,32 +44,44 @@ def _resource(service_name: str, service_version: str) -> Resource:
 
 
 def init_tracing(app, service_name: str, service_version: str) -> None:
-    """Initialize OpenTelemetry tracing with an OTLP HTTP exporter.
+    """Initialize OpenTelemetry tracing, exporting to OTLP only if configured.
 
     `app` is the FastAPI/Starlette instance to instrument. Instrumenting the
     existing app requires `instrument_app(app)`; the argument-less
     `FastAPIInstrumentor().instrument()` only patches apps created afterwards,
     so an app already constructed (as it always is by the time `enable()` runs)
     would emit no server spans.
+
+    The OTLP span exporter is attached only when an endpoint is explicitly
+    configured (`OTEL_EXPORTER_OTLP_ENDPOINT` or
+    `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`). With no collector present, defaulting
+    to a fixed endpoint would make the BatchSpanProcessor retry
+    connection-refused exports indefinitely. Without an endpoint we still set up
+    the provider + instrumentation (so spans and trace-context propagation work
+    in-process); export just stays off until a collector is wired via env.
     """
-    otel_base = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-    # For the OTLP HTTP exporter the per-signal `endpoint` kwarg is sent as-is
-    # (no /v1/traces appended), so derive the signal path from the base URL.
-    # Honor an explicit per-signal override if the caller sets one.
-    traces_endpoint = os.getenv(
-        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-        otel_base.rstrip("/") + "/v1/traces",
-    )
+    otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_traces = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 
     tracer_provider = TracerProvider(resource=_resource(service_name, service_version))
     trace.set_tracer_provider(tracer_provider)
-    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=traces_endpoint)))
+
+    if otel_endpoint or otel_traces:
+        # For the OTLP HTTP exporter the per-signal `endpoint` kwarg is sent
+        # as-is (no /v1/traces appended), so derive the signal path from the
+        # base URL. Honor an explicit per-signal override if the caller sets one.
+        traces_endpoint = otel_traces or (otel_endpoint.rstrip("/") + "/v1/traces")
+        tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=traces_endpoint)))
+        logger.info("OpenTelemetry tracing initialized with OTLP endpoint: %s", traces_endpoint)
+    else:
+        logger.info(
+            "OpenTelemetry tracing initialized without an OTLP exporter "
+            "(set OTEL_EXPORTER_OTLP_ENDPOINT to enable span export)"
+        )
 
     FastAPIInstrumentor.instrument_app(app)
     RequestsInstrumentor().instrument()
     URLLib3Instrumentor().instrument()
-
-    logger.info("OpenTelemetry tracing initialized with OTLP endpoint: %s", traces_endpoint)
 
 
 def init_metrics(service_name: str, service_version: str) -> None:
