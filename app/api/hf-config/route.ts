@@ -93,7 +93,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<HFConfigRespon
   )
 
   // ── Step 2: weight bytes from safetensors.index.json ──────────────────────
-  const indexUrl = `${HF_BASE}/${modelId}/resolve/main/model.safetensors.index.json`
+  const indexUrl = `${HF_BASE}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/resolve/main/model.safetensors.index.json`
   let weightBytes: number | null = null
   let weightSource: HFConfigResponse['weightSource'] = 'estimated'
 
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<HFConfigRespon
   // ── Step 3: weight bytes from HF API (fallback) ───────────────────────────
   if (weightBytes === null) {
     try {
-      const apiUrl = `${HF_BASE}/api/models/${modelId}`
+      const apiUrl = `${HF_BASE}/api/models/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
       const apiRes = await hfFetch(apiUrl, token)
       if (apiRes.ok) {
         const meta = await apiRes.json() as Record<string, unknown>
