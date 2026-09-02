@@ -905,6 +905,28 @@ class TestModelConfigPassthrough:
         resp = client.post("/memory", json=body)
         assert resp.status_code == 200
 
+    @patch("tools.api_service.app.cli_recommend")
+    def test_empty_model_config_falls_back_to_hf_resolution(self, mock_recommend):
+        # An empty dict must not be written as a config.json; the SDK should
+        # receive the original model path and resolve it from HuggingFace.
+        mock_recommend.return_value = make_mock_cli_result()
+        body = {**VALID_RECOMMEND_BODY, "model_config": {}}
+        resp = client.post("/recommend", json=body)
+        assert resp.status_code == 200
+        assert mock_recommend.call_args.kwargs["model_path"] == "Qwen/Qwen3-32B"
+
+    @patch("tools.api_service.app.cli_recommend")
+    def test_invalid_model_config_returns_422(self, mock_recommend):
+        # A non-empty but incomplete config (e.g. Swagger's placeholder) makes
+        # the SDK raise KeyError('architectures'); surface a clear 422, not 500.
+        mock_recommend.side_effect = KeyError("architectures")
+        body = {**VALID_RECOMMEND_BODY, "model_config": {"additionalProp1": {}}}
+        resp = client.post("/recommend", json=body)
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "model_config" in detail
+        assert "architectures" in detail
+
 
 class TestOpenTelemetry:
     """Tests for OpenTelemetry instrumentation integration."""

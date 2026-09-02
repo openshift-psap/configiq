@@ -70,7 +70,9 @@ class RecommendRequest(BaseModel):
     model_config_data: dict | None = Field(
         default=None,
         alias="model_config",
-        description="Pre-fetched HuggingFace model config.json. Skips HF download.",
+        examples=[None],
+        description="Pre-fetched HuggingFace model config.json. Skips HF download. "
+        "Leave null to let the service resolve the model from HuggingFace.",
     )
 
     model_config = {"populate_by_name": True}
@@ -109,7 +111,9 @@ class EstimateRequest(BaseModel):
     model_config_data: dict | None = Field(
         default=None,
         alias="model_config",
-        description="Pre-fetched HuggingFace model config.json. Skips HF download.",
+        examples=[None],
+        description="Pre-fetched HuggingFace model config.json. Skips HF download. "
+        "Leave null to let the service resolve the model from HuggingFace.",
     )
 
     model_config = {"populate_by_name": True}
@@ -241,7 +245,9 @@ class MemoryRequest(BaseModel):
     model_config_data: dict | None = Field(
         default=None,
         alias="model_config",
-        description="Pre-fetched HuggingFace model config.json. Skips HF download.",
+        examples=[None],
+        description="Pre-fetched HuggingFace model config.json. Skips HF download. "
+        "Leave null to let the service resolve the model from HuggingFace.",
     )
 
     model_config = {"populate_by_name": True}
@@ -325,7 +331,12 @@ class _tempdir_context:
 
 
 def _with_model_config(model_path: str, config_dict: dict | None):
-    if config_dict is None:
+    # An empty dict carries no usable config — treat anything falsy as
+    # "not supplied" so the SDK resolves the model itself instead of loading a
+    # bogus config.json. (A non-empty but invalid config, such as Swagger UI's
+    # {"additionalProp1": {}} placeholder, still reaches the SDK and surfaces as
+    # a clear 422 via the KeyError branch in _common_error_handler.)
+    if not config_dict:
         return _noop_context(model_path)
     return _tempdir_context(model_path, config_dict)
 
@@ -479,6 +490,14 @@ def _common_error_handler(e: Exception, op: str, model_path: str, backend: str, 
     msg = str(e)
     if isinstance(e, NoFeasibleConfigError):
         raise HTTPException(status_code=422, detail=msg)
+    if isinstance(e, KeyError):
+        # A bare KeyError here almost always means a supplied model_config is
+        # incomplete (e.g. missing 'architectures'); str(KeyError('x')) is "'x'".
+        detail = (
+            f"Invalid or incomplete model_config for model={model_path}: missing key {msg}. "
+            "Omit model_config (or send null) to resolve the model from HuggingFace."
+        )
+        raise HTTPException(status_code=422, detail=detail)
     if isinstance(e, (ValueError, AttributeError)):
         if "system_spec" in msg or "NoneType" in msg or "unsupported model" in msg.lower():
             detail = f"No performance data available for model={model_path}, backend={backend}, system={system}."
