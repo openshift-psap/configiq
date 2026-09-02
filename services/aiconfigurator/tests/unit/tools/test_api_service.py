@@ -9,7 +9,9 @@ requiring the Rust native extension or performance databases.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -917,11 +919,21 @@ class TestModelConfigPassthrough:
 
     @patch("tools.api_service.app.cli_recommend")
     def test_invalid_model_config_returns_422(self, mock_recommend):
-        # A non-empty but incomplete config (e.g. Swagger's placeholder) makes
-        # the SDK raise KeyError('architectures'); surface a clear 422, not 500.
-        mock_recommend.side_effect = KeyError("architectures")
+        # A non-empty but incomplete config (e.g. Swagger's placeholder) is
+        # written to a temp config.json and forwarded to the SDK, which raises
+        # KeyError('architectures'). Verify both that the payload reached the SDK
+        # via a config file and that the KeyError surfaces as a clear 422.
+        forwarded = {}
+
+        def _check_then_raise(*args, **kwargs):
+            config_path = Path(kwargs["model_path"]) / "config.json"
+            forwarded["config"] = json.loads(config_path.read_text())
+            raise KeyError("architectures")
+
+        mock_recommend.side_effect = _check_then_raise
         body = {**VALID_RECOMMEND_BODY, "model_config": {"additionalProp1": {}}}
         resp = client.post("/recommend", json=body)
+        assert forwarded["config"] == {"additionalProp1": {}}
         assert resp.status_code == 422
         detail = resp.json()["detail"]
         assert "model_config" in detail
