@@ -10,6 +10,7 @@ import EyeIcon from '@patternfly/react-icons/dist/esm/icons/eye-icon';
 import EyeSlashIcon from '@patternfly/react-icons/dist/esm/icons/eye-slash-icon';
 import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon';
 import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle-icon';
+import DollarSignIcon from '@patternfly/react-icons/dist/esm/icons/dollar-sign-icon';
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 
 import styles from './AdvancedEstimate.module.css';
@@ -17,6 +18,7 @@ import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { useGpuSizer } from '@/contexts/GpuSizerContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import { ModelInput } from '@/components/ui/ModelInput';
@@ -28,6 +30,7 @@ function modelSuggestions(): string {
 }
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { Term } from '@/app/performance/quickEstimateHelpers';
+import { HOURS_PER_MONTH, AMORT_MONTHS_3YR } from '@/lib/utils/format';
 
 
 // ─── FlipTile (reused from Quick Estimate pattern) ───────────────────────────
@@ -134,7 +137,8 @@ function friendlyErrorHint(code: string | null): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdvancedEstimate() {
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, costingsEnabled, pricingSource, preferredCloudProvider } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
 
@@ -307,13 +311,22 @@ export default function AdvancedEstimate() {
   const tpsVal = useCountUp(result?.throughput.tokensPerSecond ?? 0, 750, 0);
   const memVal = useCountUp(result?.memory.value ?? 0, 750, 1);
 
-  // Cost calculations
+  // Cost calculations. Prefer a live cloud rate from the costings API (same
+  // resolver the Performance page uses), then the legacy pricing worker, then an
+  // amortized hardware cost so a GPU with a known price still shows an estimate.
   const gpuShortName = (currentGpuOption?.label ?? '').replace(/NVIDIA\s+/i, '').replace(/AMD\s+/i, '').split(' ')[0];
   const livePrice = livePricing[gpuShortName];
-  const hwCost = 30000; // pending Costings REST API
-  const pricePerHour = livePrice ?? hwCost / (36 * 730);
+  const hwCost = costings.gpuHardwareCosts.get(gpuSystem)?.new_usd ?? null;
+  const amortizedHwPerHour = hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null;
+  const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpuSystem), preferredCloudProvider);
+  const pricePerHour = resolvedCloudRate?.rate ?? livePrice ?? amortizedHwPerHour ?? null;
+  const rateBasis = resolvedCloudRate
+    ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
+    : livePrice != null ? 'live rate'
+    : amortizedHwPerHour != null ? 'amortized hardware'
+    : '';
   const numGpus = result?.recommendation.totalGpus ?? 0;
-  const monthlyCost = numGpus * pricePerHour * 730;
+  const monthlyCost = pricePerHour != null ? numGpus * pricePerHour * HOURS_PER_MONTH : null;
 
   return (
     <div className={styles.page}>
@@ -610,7 +623,43 @@ export default function AdvancedEstimate() {
                 </>
               }
             />
+
+            {/* Est. monthly cost — only when costings is enabled and a rate is available */}
+            {costingsEnabled && monthlyCost != null && pricePerHour != null && (
+              <FlipTile
+                front={
+                  <>
+                    <span className={styles.tileLabel}><DollarSignIcon /> Est. monthly cost</span>
+                    <span className={styles.tileValue}>
+                      ${Math.round(monthlyCost).toLocaleString()}<span className={styles.tileUnit}>/mo</span>
+                    </span>
+                    <span className={styles.tileSub}>
+                      {numGpus} × ${pricePerHour.toFixed(2)}/hr{rateBasis && ` · ${rateBasis}`}
+                    </span>
+                  </>
+                }
+                back={
+                  <>
+                    <div className={styles.backTitle}>Monthly cost</div>
+                    <div className={styles.formula}>
+                      GPUs: <span className={styles.em}>{numGpus}</span><br />
+                      rate: <span className={styles.em}>${pricePerHour.toFixed(2)}/GPU-hr</span><br />
+                      hours/mo: <span className={styles.em}>{HOURS_PER_MONTH}</span><br />
+                      total = <span className={styles.em}>${Math.round(monthlyCost).toLocaleString()}/mo</span>
+                    </div>
+                  </>
+                }
+              />
+            )}
           </div>
+
+          {costingsEnabled && monthlyCost == null && (
+            <div className={styles.card} style={{ marginBottom: 24, fontSize: '13px', color: '#54585c' }}>
+              <DollarSignIcon /> Cloud rate and hardware cost unavailable for this GPU —
+              pick a provider on the Sources page or choose a GPU with published rates
+              to see the estimated monthly cost.
+            </div>
+          )}
 
           {/* ─── Estimated serving performance ─── */}
           <div className={styles.card} style={{ marginBottom: 24 }}>
