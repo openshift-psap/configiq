@@ -19,12 +19,29 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
   const architectureGroups = React.useMemo(() => {
     const groups = new Map<string, GpuOption[]>()
     for (const g of gpuOptions) {
-      const key = g.architecture ?? 'other'
+      const vendor = g.vendor ?? ''
+      const arch = g.architecture ?? 'other'
+      const archLabel = arch.charAt(0).toUpperCase() + arch.slice(1)
+      const vendorLabel = vendor.charAt(0).toUpperCase() + vendor.slice(1)
+      const key = vendorLabel ? `${vendorLabel} ${archLabel}` : archLabel
       const list = groups.get(key)
       if (list) list.push(g)
       else groups.set(key, [g])
     }
-    return groups
+    return new Map(
+      [...groups.entries()]
+        .sort(([a], [b]) => {
+          if (a === 'other') return 1
+          if (b === 'other') return -1
+          return a.localeCompare(b)
+        })
+        .map(([groupLabel, gpus]) =>
+          [
+            groupLabel,
+            [...gpus].sort((a, b) => a.label.localeCompare(b.label)),
+          ] as const,
+        ),
+    )
   }, [gpuOptions])
 
   return (
@@ -38,8 +55,8 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
       >
         {gpuOptions.length === 0
           ? <option value={value} disabled>Loading GPU catalog…</option>
-          : [...architectureGroups.entries()].map(([architecture, gpus]) => (
-              <optgroup key={architecture} label={architecture.charAt(0).toUpperCase() + architecture.slice(1)}>
+          : [...architectureGroups.entries()].map(([groupLabel, gpus]) => (
+              <optgroup key={groupLabel} label={groupLabel}>
                 {gpus.map(g => (
                   <option key={g.systemId} value={g.systemId}>
                     {g.label}
