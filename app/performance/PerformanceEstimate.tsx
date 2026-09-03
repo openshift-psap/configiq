@@ -33,10 +33,12 @@ import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import type { InferenceConfigResult } from '@/lib/gpu-math/inference-config';
 import Link from 'next/link';
+import { HOURS_PER_MONTH, AMORT_MONTHS_3YR, AMORT_MONTHS_5YR } from '@/lib/utils/format';
 
 function modelSuggestions(): string {
   return getAppConfig().suggestedModelNames.join(', ');
@@ -72,7 +74,8 @@ const QUICK_ESTIMATE_TOUR: TourStep[] = [
 
 export default function QuickEstimate() {
   console.log('🔵 QuickEstimate component mounting');
-  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion } = useSettings();
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion, costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
   const { gpuOptions: aicGpus, modelOptions: aicModels, modelSpecs, isLoading: catalogLoading } = useAicCatalog();
 
   const [model, setModel] = React.useState('');
@@ -270,7 +273,7 @@ export default function QuickEstimate() {
     // Debounce to avoid fetching while user is typing
     const timer = setTimeout(fetchConfig, 500);
     return () => clearTimeout(timer);
-  }, [model, hfToken, hydrated]);
+  }, [model, hfToken, hydrated, aicModels]);
 
   // Auto-run calculation when inputs change — calls AIC /recommend API
   React.useEffect(() => {
@@ -341,7 +344,12 @@ export default function QuickEstimate() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); clearInterval(elapsedTimer); };
-  }, [calcTrigger]); // only fire on explicit Calculate press
+    // Intentionally keyed on calcTrigger alone: the Calculate button increments
+    // it to snapshot the current inputs and fire one /recommend request. Listing
+    // the individual inputs here would auto-run the API on every keystroke, which
+    // is exactly the behaviour the explicit-Calculate flow avoids.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcTrigger]);
 
   // Fetch live pricing from Cloudflare Worker
   React.useEffect(() => {
@@ -367,8 +375,8 @@ export default function QuickEstimate() {
     };
 
     fetchPricing();
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchPricing, 5 * 60 * 1000);
+    const REFRESH_MS = 5 * 60 * 1000; // refresh live pricing every 5 minutes
+    const interval = setInterval(fetchPricing, REFRESH_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -485,7 +493,10 @@ export default function QuickEstimate() {
   // Use live pricing if available, fallback to estimated pricing from hardware cost
   const currentAicGpu = aicGpus.find(g => g.systemId === gpu);
   const gpuLabel = currentAicGpu?.label ?? '';
-  const catalogGpuForPricing = null as { hardware_cost_usd: number; name: string } | null; // pending Costings REST API
+  const hwCostEntry = costings.gpuHardwareCosts.get(gpu)
+  const catalogGpuForPricing = hwCostEntry?.new_usd != null
+    ? { hardware_cost_usd: hwCostEntry.new_usd, name: currentAicGpu?.label ?? gpu }
+    : null
 
   // Map GPU to pricing key for live pricing worker (pending Costings REST API)
   const gpuPricingKey = gpuLabel.includes('H200') ? 'H200' :
@@ -494,23 +505,18 @@ export default function QuickEstimate() {
                         gpuLabel.includes('L40S') ? 'L40S' :
                         gpuLabel.includes('MI300X') ? 'MI300X' : gpuLabel;
 
-  const estimatedHourlyPrice = 2.49; // pending Costings REST API
+  // Resolve a cloud $/hr from the costings API (preferred provider → cheapest
+  // on-demand → cheapest spot), falling back to the legacy live-pricing worker.
+  const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpu), preferredCloudProvider)
+  const workerRate = livePricing[gpuPricingKey] ?? null
+  const gpuPricePerHour: number | null = resolvedCloudRate?.rate ?? workerRate;
+  // Honest label for where the rate came from — never assume a provider.
+  const cloudRateLabel = resolvedCloudRate
+    ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
+    : (workerRate != null ? 'live rate' : '');
 
-  const gpuPricePerHour = livePricing[gpuPricingKey] || estimatedHourlyPrice;
-
-  console.log('💰 Pricing lookup:', {
-    gpu,
-    gpuPricingKey,
-    catalogGpu: catalogGpuForPricing?.name,
-    hwCost: catalogGpuForPricing?.hardware_cost_usd,
-    livePricing: Object.keys(livePricing),
-    foundPrice: livePricing[gpuPricingKey],
-    estimatedPrice: estimatedHourlyPrice.toFixed(2),
-    finalPrice: gpuPricePerHour.toFixed(2)
-  });
-
-  const realMonthlyCost = testResult ?
-    realGpuCount * gpuPricePerHour * 730 :
+  const realMonthlyCost = testResult && gpuPricePerHour != null ?
+    realGpuCount * gpuPricePerHour * HOURS_PER_MONTH :
     0;
 
   const gpus = useCountUp(realGpuCount);
@@ -572,7 +578,7 @@ export default function QuickEstimate() {
         kvCategoryLabel: testResult.memory_analysis.kv_category_label || 'Standard Dense',
         cloudCostMonthly: realMonthlyCost,
         cloudCost5Year: realMonthlyCost * 60,
-        selfHostedCostMonthly: (catalogGpuForPricing.hardware_cost_usd * realGpuCount) / 60,
+        selfHostedCostMonthly: (catalogGpuForPricing.hardware_cost_usd * realGpuCount) / AMORT_MONTHS_5YR,
         selfHostedCost5Year: catalogGpuForPricing.hardware_cost_usd * realGpuCount,
       },
     });
@@ -684,8 +690,8 @@ export default function QuickEstimate() {
       testResult.memory_analysis.weight_gb.toFixed(1),
       (testResult.memory_analysis.kv_cache_used_gb || 0).toFixed(1),
       testResult.memory_analysis.kv_category_label || 'Standard Dense',
-      `$${realMonthlyCost.toLocaleString()}`, `$${(realMonthlyCost * 60).toLocaleString()}`,
-      `$${((catalogGpuForPricing.hardware_cost_usd * realGpuCount) / 60).toFixed(0)}`,
+      `$${realMonthlyCost.toLocaleString()}`, `$${(realMonthlyCost * AMORT_MONTHS_5YR).toLocaleString()}`,
+      `$${((catalogGpuForPricing.hardware_cost_usd * realGpuCount) / AMORT_MONTHS_5YR).toFixed(0)}`,
       `$${(catalogGpuForPricing.hardware_cost_usd * realGpuCount).toLocaleString()}`
     ];
 
@@ -1353,7 +1359,19 @@ export default function QuickEstimate() {
           />
         </div>
 
-        <div style={{ display: 'none' }}>
+        {costingsEnabled && gpuPricePerHour == null && (
+          <div style={{
+            border: '1px solid #d2d2d2', borderRadius: '6px', padding: '14px',
+            fontSize: '13px', fontFamily: 'var(--font-mono)', color: '#54585c',
+          }}>
+            <DollarSignIcon /> Cloud rate unavailable for this GPU — pick a
+            provider on the Sources page or choose a GPU with published rates to
+            see the cost comparison.
+          </div>
+        )}
+
+        {costingsEnabled && gpuPricePerHour != null && (
+        <div>
           <FlipTile
             front={
             <>
@@ -1380,14 +1398,16 @@ export default function QuickEstimate() {
                     <Term k="cloudPricing" />
                   </div>
                   <div style={{ fontSize: '28px', fontFamily: 'var(--font-display)', fontWeight: 700, color: '#151515', marginBottom: '4px' }}>
-                    ${((Math.round(gpus) * gpuPricePerHour * 730) / 1000).toFixed(1)}K/mo
+                    ${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) / 1000).toFixed(1)}K/mo
                   </div>
                   <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#3c3f42' }}>
-                    AWS · ${((Math.round(gpus) * gpuPricePerHour * 730 * 60) / 1000).toFixed(0)}K over 5yr
+                    {cloudRateLabel && `${cloudRateLabel} · `}${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH * AMORT_MONTHS_5YR) / 1000).toFixed(0)}K over 5yr
                   </div>
                 </div>
 
-                {/* Self-hosted pricing tile */}
+                {/* Self-hosted pricing tile — only when a hardware cost is known,
+                    otherwise a $0 tile would imply self-hosting is free. */}
+                {catalogGpuForPricing && (
                 <div style={{
                   flex: 1,
                   border: '1px solid #d2d2d2',
@@ -1409,21 +1429,34 @@ export default function QuickEstimate() {
                     <Term k="selfHosted" />
                   </div>
                   <div style={{ fontSize: '28px', fontFamily: 'var(--font-display)', fontWeight: 700, color: '#151515', marginBottom: '4px' }}>
-                    ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 60 / 1000).toFixed(1)}K/mo
+                    ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo
                   </div>
                   <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#3c3f42' }}>
-                    5yr amort · ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K total
+                    5yr amort · ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K total
                   </div>
                 </div>
+                )}
               </div>
 
-              {/* Savings label */}
-              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '8px', height: '8px', background: '#3d7317', borderRadius: '2px' }}></div>
-                <span style={{ fontSize: '13px', fontFamily: 'var(--font-display)', fontWeight: 600, color: '#3d7317' }}>
-                  Self-hosted saves ${(((Math.round(gpus) * gpuPricePerHour * 730) - ((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 60)) / 1000).toFixed(1)}K/mo
-                </span>
-              </div>
+              {/* Cost-difference label — only meaningful when both cloud and
+                  self-hosted costs are known. Names whichever option is cheaper
+                  rather than always claiming self-hosted "saves" (which would show
+                  a negative saving when self-hosted is the pricier option). */}
+              {catalogGpuForPricing && (() => {
+                const cloudMonthly = Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH
+                const selfHostedMonthly = (catalogGpuForPricing.hardware_cost_usd * Math.round(gpus)) / AMORT_MONTHS_5YR
+                const diff = cloudMonthly - selfHostedMonthly
+                const cheaper = diff >= 0 ? 'Self-hosted' : 'Cloud'
+                const color = diff >= 0 ? '#3d7317' : '#8250df'
+                return (
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', background: color, borderRadius: '2px' }}></div>
+                    <span style={{ fontSize: '13px', fontFamily: 'var(--font-display)', fontWeight: 600, color }}>
+                      {cheaper} saves ${(Math.abs(diff) / 1000).toFixed(1)}K/mo
+                    </span>
+                  </div>
+                )
+              })()}
             </>
           }
           back={
@@ -1432,16 +1465,22 @@ export default function QuickEstimate() {
               <div className={styles.formula}>
                 <strong style={{ color: '#3c3f42', fontSize: '12px' }}>Cloud:</strong><br />
                 {Math.round(gpus)} GPUs × <span className={styles.em}>${gpuPricePerHour.toFixed(2)}/gpu-hr</span> × <span className={styles.em}>730 hrs</span><br />
-                = <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * 730) / 1000).toFixed(1)}K/mo</span><br />
+                = <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH) / 1000).toFixed(1)}K/mo</span><br />
                 <br />
+                {catalogGpuForPricing && (
+                <>
                 <strong style={{ color: '#3c3f42', fontSize: '12px' }}>Self-hosted:</strong><br />
-                ${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K ÷ <span className={styles.em}>60 months</span><br />
-                = <span className={styles.em}>${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 60 / 1000).toFixed(1)}K/mo</span><br />
+                ${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K ÷ <span className={styles.em}>60 months</span><br />
+                = <span className={styles.em}>${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / AMORT_MONTHS_5YR / 1000).toFixed(1)}K/mo</span><br />
                 <span style={{ fontSize: '11.5px', color: '#3c3f42' }}>(hardware amortization only)</span><br />
                 <br />
+                </>
+                )}
                 <strong style={{ color: '#3c3f42', fontSize: '12px' }}>5-year totals:</strong><br />
-                Cloud: <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * 730 * 60) / 1000).toFixed(0)}K</span><br />
-                Hardware: <span className={styles.em}>${((catalogGpuForPricing ? catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) : 0) / 1000).toFixed(0)}K</span><br />
+                Cloud: <span className={styles.em}>${((Math.round(gpus) * gpuPricePerHour * HOURS_PER_MONTH * AMORT_MONTHS_5YR) / 1000).toFixed(0)}K</span><br />
+                {catalogGpuForPricing && (
+                <>Hardware: <span className={styles.em}>${(catalogGpuForPricing.hardware_cost_usd * Math.round(gpus) / 1000).toFixed(0)}K</span><br /></>
+                )}
                 <br />
                 <div style={{ background: 'rgba(255, 193, 7, 0.1)', padding: '8px', borderRadius: '4px', marginTop: '8px' }}>
                   <span style={{ fontSize: '11.5px', color: '#995c00', lineHeight: '1.5' }}>
@@ -1453,6 +1492,7 @@ export default function QuickEstimate() {
           }
         />
         </div>
+        )}
       </div>
       )}
 
@@ -1784,11 +1824,11 @@ export default function QuickEstimate() {
         <Button variant="secondary" onClick={handleCopyCLICommand} isDisabled={!testResult}>
           Copy CLI command
         </Button>
-        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult}>
+        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult || !catalogGpuForPricing}>
           Export to Sheets
         </Button>
         <span className={styles.footerSpacer} />
-        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult}>
+        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult || !catalogGpuForPricing}>
           Save estimate{savedCount > 0 && ` (${savedCount})`}
         </Button>
       </div>
