@@ -606,7 +606,7 @@ export default function QuickEstimate() {
       memory: {
         weight_precision: testWeightPrecision.toLowerCase(),
         kv_cache_precision: testKVCachePrecision.toLowerCase(),
-        gpu_memory_utilization: 0.90
+        gpu_memory_utilization: currentAicGpu?.gpuMemoryUtilization ?? 0.90
       },
       gpu: {
         gpu_type: gpu,
@@ -1874,7 +1874,29 @@ export default function QuickEstimate() {
         <Button variant="link" isInline onClick={() => setShowApi((s) => !s)}>
           {showApi ? 'Hide' : 'Preview'} API request body
         </Button>
-        {showApi && <pre className={styles.apiBody}>{API_PREVIEW}</pre>}
+        {showApi && (
+          <pre className={styles.apiBody}>
+            {JSON.stringify({
+              model_path: model || '(select model)',
+              system: gpu || '(select GPU)',
+              backend: inferenceBackend,
+              isl: testISL,
+              osl: testOSL,
+              batch_size: testConcurrentUsers,
+              tp_size: testResult?.memory_analysis.tp_size ?? 'auto',
+              pp_size: testResult?.parallelism_strategy.pp_size ?? testPpSize,
+              ...(testPrefix > 0 && { prefix: testPrefix }),
+              ...(backendVersion && { backend_version: backendVersion }),
+              ...(testWeightPrecision === 'FP8' && { gemm_quant_mode: 'fp8' }),
+              ...(testWeightPrecision === 'INT8' && { gemm_quant_mode: 'int8_wo' }),
+              ...(testWeightPrecision === 'INT4' && { gemm_quant_mode: 'int4_wo' }),
+              ...(testWeightPrecision === 'MXFP4' && { gemm_quant_mode: 'mxfp4' }),
+              ...(testWeightPrecision === 'NVFP4' && { gemm_quant_mode: 'nvfp4' }),
+              ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
+              ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' })
+            }, null, 2)}
+          </pre>
+        )}
       </div>
     </div>
   );
@@ -1895,16 +1917,3 @@ function ConstraintRow({ label, detail, status, term }: { label: string; detail:
     </div>
   );
 }
-
-
-const API_PREVIEW = `{
-  "model": { "model_id": "meta-llama/Llama-3.1-8B-Instruct", "max_model_len": "auto" },
-  "workload": { "isl_tokens": 100, "osl_tokens": 50, "prefix_cache_hit_rate": 0.0,
-                "requests_per_day": 1000000, "peak_multiplier": 3.0 },
-  "memory": { "weight_precision": "bf16", "kv_cache_precision": "fp16",
-              "gpu_memory_utilization": 0.90 },
-  "hardware": { "gpu_type": "H100_80GB" },
-  "parallelism": { "tensor_parallel_size": "auto" },
-  "engine": { "runtime": "vllm", "block_size": 16, "max_num_seqs": 256,
-              "enable_prefix_caching": true, "enable_chunked_prefill": "auto" }
-}`;
