@@ -589,38 +589,35 @@ export default function QuickEstimate() {
     setTimeout(() => setShowToast(false), 5000);
   };
 
+  // Build the /api/estimate request body from current form state
+  const buildEstimateRequestBody = React.useCallback(() => {
+    return {
+      model_path: model || '(select model)',
+      system: gpu || '(select GPU)',
+      backend: inferenceBackend,
+      isl: testISL,
+      osl: testOSL,
+      batch_size: testConcurrentUsers,
+      tp_size: testResult?.memory_analysis.tp_size ?? testTpSize,
+      pp_size: testResult?.parallelism_strategy.pp_size ?? testPpSize,
+      ...(testPrefix > 0 && { prefix: testPrefix }),
+      ...(backendVersion && { backend_version: backendVersion }),
+      ...(testWeightPrecision === 'FP8' && { gemm_quant_mode: 'fp8' }),
+      ...(testWeightPrecision === 'INT8' && { gemm_quant_mode: 'int8_wo' }),
+      ...(testWeightPrecision === 'INT4' && { gemm_quant_mode: 'int4_wo' }),
+      ...(testWeightPrecision === 'MXFP4' && { gemm_quant_mode: 'mxfp4' }),
+      ...(testWeightPrecision === 'NVFP4' && { gemm_quant_mode: 'nvfp4' }),
+      ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
+      ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' })
+    };
+  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision]);
+
   // Copy API request body to clipboard
   const handleCopyAPIRequest = async () => {
     if (!testResult) return;
 
-    const apiRequest: Record<string, unknown> = {
-      model: {
-        model_id: model,
-        max_model_len: 'auto'
-      },
-      workload: {
-        isl_tokens: testISL,
-        osl_tokens: testOSL,
-        concurrent_users: testConcurrentUsers,
-      },
-      memory: {
-        weight_precision: testWeightPrecision.toLowerCase(),
-        kv_cache_precision: testKVCachePrecision.toLowerCase(),
-        gpu_memory_utilization: currentAicGpu?.gpuMemoryUtilization ?? 0.90
-      },
-      gpu: {
-        gpu_type: gpu,
-        tp_size: testResult.memory_analysis.tp_size,
-        replicas: testResult.memory_analysis.replicas
-      }
-    };
-
-    if (testResult.parallelism_strategy.pp_size > 1) {
-      (apiRequest.gpu as Record<string, unknown>).pp_size = testResult.parallelism_strategy.pp_size;
-    }
-
     try {
-      await navigator.clipboard.writeText(JSON.stringify(apiRequest, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(buildEstimateRequestBody(), null, 2));
       setToastMessage('api-copied');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
@@ -1876,25 +1873,7 @@ export default function QuickEstimate() {
         </Button>
         {showApi && (
           <pre className={styles.apiBody}>
-            {JSON.stringify({
-              model_path: model || '(select model)',
-              system: gpu || '(select GPU)',
-              backend: inferenceBackend,
-              isl: testISL,
-              osl: testOSL,
-              batch_size: testConcurrentUsers,
-              tp_size: testResult?.memory_analysis.tp_size ?? 'auto',
-              pp_size: testResult?.parallelism_strategy.pp_size ?? testPpSize,
-              ...(testPrefix > 0 && { prefix: testPrefix }),
-              ...(backendVersion && { backend_version: backendVersion }),
-              ...(testWeightPrecision === 'FP8' && { gemm_quant_mode: 'fp8' }),
-              ...(testWeightPrecision === 'INT8' && { gemm_quant_mode: 'int8_wo' }),
-              ...(testWeightPrecision === 'INT4' && { gemm_quant_mode: 'int4_wo' }),
-              ...(testWeightPrecision === 'MXFP4' && { gemm_quant_mode: 'mxfp4' }),
-              ...(testWeightPrecision === 'NVFP4' && { gemm_quant_mode: 'nvfp4' }),
-              ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
-              ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' })
-            }, null, 2)}
+            {JSON.stringify(buildEstimateRequestBody(), null, 2)}
           </pre>
         )}
       </div>
