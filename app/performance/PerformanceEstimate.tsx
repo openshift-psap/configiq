@@ -589,7 +589,7 @@ export default function QuickEstimate() {
     setTimeout(() => setShowToast(false), 5000);
   };
 
-  // Build the /api/estimate request body from current form state
+  // Build the /api/estimate request body from current form state and GPU-specific values
   const buildEstimateRequestBody = React.useCallback(() => {
     return {
       model_path: model || '(select model)',
@@ -600,6 +600,8 @@ export default function QuickEstimate() {
       batch_size: testConcurrentUsers,
       tp_size: testResult?.memory_analysis.tp_size ?? testTpSize,
       pp_size: testResult?.parallelism_strategy.pp_size ?? testPpSize,
+      vram_gb: currentAicGpu?.vramGb ?? null,
+      gpu_memory_utilization: currentAicGpu?.gpuMemoryUtilization,
       ...(testPrefix > 0 && { prefix: testPrefix }),
       ...(backendVersion && { backend_version: backendVersion }),
       ...(testWeightPrecision === 'FP8' && { gemm_quant_mode: 'fp8' }),
@@ -610,7 +612,7 @@ export default function QuickEstimate() {
       ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
       ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' })
     };
-  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision]);
+  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, currentAicGpu, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision]);
 
   // Copy API request body to clipboard
   const handleCopyAPIRequest = async () => {
