@@ -80,21 +80,31 @@ export default function QuickEstimate() {
 
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
+  const [prefillChecked, setPrefillChecked] = React.useState(false);
+  const modelWasPrefilled = React.useRef(false);
+
+  React.useEffect(() => {
+    const prefill = parsePerformancePrefill(globalThis.location?.search || '');
+    modelWasPrefilled.current = Boolean(prefill.model);
+    if (prefill.model) setModel(prefill.model);
+    if (prefill.system) setGpu(prefill.system);
+    setPrefillChecked(true);
+  }, []);
 
   // Set model from settings after context has loaded from localStorage
   const modelFromSettings = React.useRef(false);
   React.useEffect(() => {
-    if (!hydrated || modelFromSettings.current) return;
+    if (!hydrated || !prefillChecked || modelFromSettings.current) return;
     modelFromSettings.current = true;
-    setModel(settingsDefaultModel);
-  }, [hydrated, settingsDefaultModel]);
+    if (!modelWasPrefilled.current) setModel(settingsDefaultModel);
+  }, [hydrated, prefillChecked, settingsDefaultModel]);
 
   // If defaultSystem not in catalog, fall back to first available
   React.useEffect(() => {
-    if (aicGpus.length > 0 && !aicGpus.find(g => g.systemId === gpu)) {
+    if (prefillChecked && aicGpus.length > 0 && !aicGpus.find(g => g.systemId === gpu)) {
       setGpu(aicGpus[0].systemId);
     }
-  }, [aicGpus, gpu]);
+  }, [aicGpus, gpu, prefillChecked]);
 
   const [fav, setFav] = React.useState(false);
   const [expanded, setExpanded] = React.useState<string[]>([]);
